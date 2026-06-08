@@ -1,0 +1,2079 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAU Test Case Studio v3.2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- SheetJS for Excel -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <!-- JSZip for DOCX manipulation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-editor: #1e1e1e;
+      --bg-panel: #2d2d2d;
+      --bg-sidebar: #252526;
+      --bg-header: #3c3c3c;
+      --border: #3c3c3c;
+      --border-focus: #007acc;
+      --accent: #007acc;
+      --accent-hover: #1f8ad2;
+      --text: #d4d4d4;
+      --text-muted: #858585;
+      --text-bright: #ffffff;
+      --green: #4ec9b0;
+      --red: #f44747;
+      --yellow: #dcdcaa;
+      --blue: #569cd6;
+      --font-mono: 'Fira Code', monospace;
+      --font-sans: 'Inter', sans-serif;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-panel);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Lucide Icon Alignment */
+    .lucide {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2.5px;
+      vertical-align: middle;
+      display: inline-block;
+    }
+
+    /* ── TOP HEADER / MENUBAR ── */
+    header {
+      background: var(--bg-sidebar);
+      border-bottom: 1px solid var(--border);
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      user-select: none;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-icon {
+      display: flex;
+      align-items: center;
+    }
+
+    .brand-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-bright);
+    }
+
+    .version-tag {
+      background: #3a3a3a;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .menu-bar {
+      display: flex;
+      gap: 12px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .menu-item {
+      cursor: pointer;
+    }
+
+    .menu-item:hover {
+      color: var(--text-bright);
+    }
+
+    /* ── TOOLBAR ── */
+    .toolbar {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+    }
+
+    .tb-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text);
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+    }
+
+    .tb-btn .lucide {
+      width: 13px;
+      height: 13px;
+    }
+
+    .tb-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--border);
+    }
+
+    .tb-btn.primary {
+      background: var(--accent);
+      color: var(--text-bright);
+      border-color: var(--accent);
+    }
+
+    .tb-btn.primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .tb-separator {
+      width: 1px;
+      height: 18px;
+      background: var(--border);
+      margin: 0 4px;
+    }
+
+    /* ── MAIN LAYOUT ── */
+    .app-container {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── LEFT SIDEBAR (Navigator) ── */
+    .sidebar {
+      width: 250px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .sidebar-header {
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tree-view {
+      padding: 8px;
+      overflow-y: auto;
+      flex: 1;
+      font-size: 12px;
+    }
+
+    .tree-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px;
+      border-radius: 3px;
+      cursor: pointer;
+      margin-bottom: 2px;
+    }
+
+    .tree-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tree-item.active {
+      background: rgba(0, 122, 204, 0.2);
+      color: var(--text-bright);
+      border-left: 2px solid var(--accent);
+    }
+
+    .tree-item .icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tree-item .icon .lucide {
+      width: 13px;
+      height: 13px;
+    }
+
+    .tree-item.indent {
+      margin-left: 14px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    /* ── WORKSPACE (Tabs + Content + Gutter) ── */
+    .workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-editor);
+      overflow: hidden;
+    }
+
+    /* Editor Tabs */
+    .editor-tabs {
+      background: var(--bg-sidebar);
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      user-select: none;
+    }
+
+    .editor-tab {
+      padding: 8px 16px;
+      font-size: 12px;
+      border-right: 1px solid var(--border);
+      background: var(--bg-sidebar);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      position: relative;
+    }
+
+    .editor-tab .lucide {
+      width: 12px;
+      height: 12px;
+    }
+
+    .editor-tab.active {
+      background: var(--bg-editor);
+      color: var(--text-bright);
+    }
+
+    .editor-tab.active::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+    }
+
+    /* Inner Editor Layout with Gutter */
+    .editor-layout {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Vertical Gutter Toolbar (DBeaver Style) */
+    .gutter-toolbar {
+      width: 34px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 0;
+      gap: 6px;
+      user-select: none;
+    }
+
+    .gt-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      width: 26px;
+      height: 26px;
+      border-radius: 3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.1s;
+      outline: none;
+    }
+
+    .gt-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-bright);
+      border-color: var(--border);
+    }
+
+    .gt-separator {
+      width: 18px;
+      height: 1px;
+      background: var(--border);
+      margin: 4px 0;
+    }
+
+    /* Editor Content Panels */
+    .editor-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .tab-panel {
+      display: none;
+      height: 100%;
+    }
+
+    .tab-panel.active {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Grid Form */
+    .grid-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 768px) {
+      .grid-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .panel-card h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-bright);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .panel-card h3 .lucide {
+      width: 15px;
+      height: 15px;
+    }
+
+    .panel-card label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      display: block;
+      margin-top: 4px;
+    }
+
+    /* Standard inputs */
+    input[type="text"],
+    textarea,
+    select {
+      width: 100%;
+      background: var(--bg-editor);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 12.5px;
+      outline: none;
+      border-radius: 3px;
+      transition: border-color 0.15s;
+    }
+
+    input[type="text"]:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--accent);
+    }
+
+    textarea {
+      resize: vertical;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /* File upload */
+    .file-dropzone {
+      border: 1px dashed var(--border);
+      border-radius: 4px;
+      padding: 14px;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.01);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .file-dropzone:hover {
+      background: rgba(255, 255, 255, 0.03);
+      border-color: var(--accent);
+    }
+
+    .file-dropzone .lucide {
+      width: 18px;
+      height: 18px;
+      margin-right: 6px;
+    }
+
+    .file-dropzone p {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Column selector chips */
+    .column-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .chip {
+      background: var(--bg-editor);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+    }
+
+    .chip.active {
+      border-color: var(--accent);
+      background: rgba(0, 122, 204, 0.15);
+      color: var(--text-bright);
+    }
+
+    .chip input {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    /* Replace word rules table */
+    .rules-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+
+    .rules-table th,
+    .rules-table td {
+      border: 1px solid var(--border);
+      padding: 6px;
+      text-align: left;
+    }
+
+    .rules-table th {
+      background: var(--bg-sidebar);
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .rules-table td input {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      width: 100%;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .rules-table td input:focus {
+      background: var(--bg-editor);
+    }
+
+    .action-btn-sm {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 4px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .action-btn-sm:hover {
+      color: var(--red);
+      border-color: var(--red);
+    }
+
+    .action-btn-sm .lucide {
+      width: 12px;
+      height: 12px;
+    }
+
+    /* ── BOTTOM CONSOLE/OUTPUT PANEL ── */
+    .console-panel {
+      height: 220px;
+      background: var(--bg-sidebar);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .console-tabs {
+      background: var(--bg-panel);
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      font-size: 11.5px;
+      user-select: none;
+    }
+
+    .console-tab {
+      padding: 6px 14px;
+      border-right: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .console-tab.active {
+      background: var(--bg-sidebar);
+      color: var(--text-bright);
+      font-weight: 600;
+    }
+
+    .console-tab .lucide {
+      width: 13px;
+      height: 13px;
+    }
+
+    .console-body {
+      flex: 1;
+      padding: 10px 14px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+
+    .console-log-line {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+      padding: 2px 0;
+    }
+
+    .console-log-line.success {
+      color: var(--green);
+    }
+
+    .console-log-line.error {
+      color: var(--red);
+    }
+
+    .console-log-line.warn {
+      color: var(--yellow);
+    }
+
+    .console-log-line .timestamp {
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .download-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(0, 122, 204, 0.05);
+      border-top: 1px solid rgba(0, 122, 204, 0.2);
+      align-items: center;
+      display: none;
+    }
+
+    .download-strip.visible {
+      display: flex;
+    }
+
+    .download-strip .lucide {
+      width: 13px;
+      height: 13px;
+      margin-right: 4px;
+    }
+
+    /* Result Preview Container */
+    .preview-container {
+      display: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-panel);
+      padding: 12px;
+      max-height: 350px;
+      overflow: auto;
+    }
+
+    .preview-container.visible {
+      display: block;
+    }
+
+    .preview-container h4 {
+      font-size: 12px;
+      color: var(--text-bright);
+      margin-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .preview-container h4 .lucide {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Highlighted replace word output styling */
+    .replace-highlight {
+      background: rgba(220, 220, 170, 0.25);
+      border-bottom: 1.5px solid var(--yellow);
+      color: var(--yellow);
+      font-weight: 500;
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+
+    /* Card Preview Styles */
+    .card-preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .case-card {
+      background: #ffffff;
+      color: #333333;
+      border: 1px solid #cccccc;
+      border-radius: 4px;
+      padding: 10px;
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    .case-card-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .case-card-table td {
+      border: 1px solid #dddddd;
+      padding: 4px 6px;
+      vertical-align: top;
+    }
+
+    .case-card-table td.label-cell {
+      background: #f2f2f2;
+      font-weight: bold;
+      width: 35%;
+    }
+
+    .case-card-table td.strike-failed {
+      color: #333;
+    }
+
+    .case-card-table s {
+      color: #999999;
+    }
+
+    .case-card-table .capture-box {
+      height: 60px;
+      background: #fafafa;
+      border: 1px dashed #cccccc;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Toast notification container -->
+  <div id="toastContainer" style="position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px;"></div>
+
+  <!-- ── TOP HEADER / MENUBAR ── -->
+  <header>
+    <div class="brand">
+      <span class="brand-icon">
+        <i data-lucide="database" style="color: var(--accent);"></i>
+      </span>
+      <span class="brand-title">SAU Test Case Studio</span>
+      <span class="version-tag">v3.2</span>
+    </div>
+    <div class="menu-bar">
+      <div class="menu-item">File</div>
+      <div class="menu-item">Edit</div>
+      <div class="menu-item">Tools</div>
+      <div class="menu-item">Database</div>
+      <div class="menu-item">Help</div>
+    </div>
+  </header>
+
+  <!-- ── TOOLBAR ── -->
+  <div class="toolbar">
+    <button class="tb-btn primary" id="btnExecute" onclick="triggerExecution()">
+      <i data-lucide="play"></i> Execute query
+    </button>
+    <div class="tb-separator"></div>
+    <button class="tb-btn" onclick="triggerClear()">
+      <i data-lucide="eraser"></i> Clear output
+    </button>
+    <div class="tb-separator"></div>
+    <div style="font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+      <span>Active schema:</span>
+      <strong style="color: var(--blue);">TEST_CASES</strong>
+    </div>
+  </div>
+
+  <!-- ── MAIN LAYOUT ── -->
+  <div class="app-container">
+
+    <!-- Navigator Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>Database Navigator</span>
+        <i data-lucide="refresh-cw" style="cursor: pointer; width: 12px; height: 12px;" title="Refresh"></i>
+      </div>
+      <div class="tree-view">
+        <div class="tree-item">
+          <span class="icon">
+            <i data-lucide="plug" style="color: var(--blue);"></i>
+          </span>
+          <strong>Local_QA_Project</strong>
+        </div>
+        <div class="tree-item indent active" id="treeAutoFill" onclick="activateTab('autofill')">
+          <span class="icon">
+            <i data-lucide="zap"></i>
+          </span>
+          <span>Auto Fill Tester</span>
+        </div>
+        <div class="tree-item indent" id="treeReplacer" onclick="activateTab('replacer')">
+          <span class="icon">
+            <i data-lucide="refresh-cw"></i>
+          </span>
+          <span>Word Replacer</span>
+        </div>
+        <div class="tree-item indent" id="treeTestCard" onclick="activateTab('testcard')">
+          <span class="icon">
+            <i data-lucide="credit-card"></i>
+          </span>
+          <span>Test Card Generator</span>
+        </div>
+        <div style="margin-top:14px;" class="tree-item">
+          <span class="icon">
+            <i data-lucide="folder" style="color: #dcb67a;"></i>
+          </span>
+          <span>Selected Files</span>
+        </div>
+        <div id="sidebarFilesArea">
+          <div style="padding: 4px 20px; font-size:11px; color: var(--text-muted);">No files loaded</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Workspace (Editor Tabs & Body) -->
+    <div class="workspace">
+      <!-- Editor Tabs -->
+      <div class="editor-tabs">
+        <div class="editor-tab active" id="tabAutoFill" onclick="activateTab('autofill')">
+          <i data-lucide="zap"></i>
+          <span>Auto Fill Tester</span>
+        </div>
+        <div class="editor-tab" id="tabReplacer" onclick="activateTab('replacer')">
+          <i data-lucide="refresh-cw"></i>
+          <span>Word Replacer</span>
+        </div>
+        <div class="editor-tab" id="tabTestCard" onclick="activateTab('testcard')">
+          <i data-lucide="credit-card"></i>
+          <span>Test Card Generator</span>
+        </div>
+      </div>
+
+      <!-- Inner layout with Vertical Gutter Toolbar -->
+      <div class="editor-layout">
+        <div class="gutter-toolbar">
+          <button class="gt-btn" onclick="triggerExecution()" title="Execute SQL Query (Ctrl+Enter)">
+            <i data-lucide="play" style="color: #4ec9b0; width: 16px; height: 16px;"></i>
+          </button>
+          <button class="gt-btn" onclick="triggerExecution()" title="Execute SQL in New Tab">
+            <i data-lucide="play-circle" style="color: #569cd6; width: 16px; height: 16px;"></i>
+          </button>
+          <button class="gt-btn" onclick="triggerClear()" title="Clear Console & Results">
+            <i data-lucide="eraser" style="width: 16px; height: 16px;"></i>
+          </button>
+          <div class="gt-separator"></div>
+          <button class="gt-btn" title="Database Connection Properties">
+            <i data-lucide="settings" style="width: 16px; height: 16px;"></i>
+          </button>
+        </div>
+
+        <!-- Editor Content Panels -->
+        <div class="editor-content">
+
+          <!-- TAB 1: AUTO FILL TESTER -->
+          <div class="tab-panel active" id="panelAutoFill">
+            <div class="grid-container">
+              <!-- Left panel: Files & Column Config -->
+              <div class="panel-card">
+                <h3>
+                  <i data-lucide="folder-open" style="color: var(--accent);"></i>
+                  <span>File Selection &amp; Targets</span>
+                </h3>
+                <div class="file-dropzone" onclick="document.getElementById('fileInputAutoFill').click()">
+                  <i data-lucide="upload"></i>
+                  <span>Upload Excel / Word Test Case</span>
+                  <p>Mendukung format .xlsx, .xls, .docx</p>
+                  <input type="file" id="fileInputAutoFill" accept=".xlsx,.xls,.docx" multiple style="display:none" onchange="handleAutoFillFiles(this.files)" />
+                </div>
+
+                <label>Target Columns to Fill</label>
+                <div class="column-chips" id="chipsContainer"></div>
+
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                  <input type="text" id="customColumnInput" placeholder="Tambahkan kolom kustom..." style="flex:1;" />
+                  <button class="tb-btn" onclick="addCustomTargetColumn()" style="border: 1px solid var(--border);">+ Add</button>
+                </div>
+              </div>
+
+              <!-- Right panel: Config -->
+              <div class="panel-card">
+                <h3>
+                  <i data-lucide="settings" style="color: var(--accent);"></i>
+                  <span>Configuration Values</span>
+                </h3>
+                <div id="dynamicConfigInputs"></div>
+              </div>
+            </div>
+
+            <!-- Preview Table Area -->
+            <div class="preview-container" id="previewAreaAutoFill">
+              <h4>
+                <i data-lucide="search"></i>
+                <span>Data Preview (First Loaded File)</span>
+              </h4>
+              <div id="previewTableContent" style="font-size: 11.5px; overflow-x:auto;"></div>
+            </div>
+          </div>
+
+          <!-- TAB 2: WORD REPLACER -->
+          <div class="tab-panel" id="panelReplacer">
+            <div class="grid-container">
+              <!-- Left Panel: Text Input -->
+              <div class="panel-card" style="grid-column: span 1;">
+                <h3>
+                  <i data-lucide="edit-3" style="color: var(--accent);"></i>
+                  <span>Source Text / Input</span>
+                </h3>
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">Paste raw test case data or template text below:</p>
+                <textarea id="replacerSourceText" placeholder="Tempel teks Anda di sini...&#10;Contoh:&#10;Dear {{nama}}, mohon verifikasi skenario pada tanggal {{tanggal}}." style="height: 180px;"></textarea>
+              </div>
+
+              <!-- Right Panel: Rules & Preset -->
+              <div class="panel-card" style="grid-column: span 1;">
+                <h3>
+                  <i data-lucide="list" style="color: var(--accent);"></i>
+                  <span>Replacement Rules</span>
+                </h3>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <label>Find &amp; Replace List</label>
+                  <button class="tb-btn" onclick="addReplacerRow()" style="padding: 2px 6px; font-size:11px;">+ Add Rule</button>
+                </div>
+                <div style="max-height:160px; overflow-y:auto; border:1px solid var(--border); border-radius:3px;">
+                  <table class="rules-table">
+                    <thead>
+                      <tr>
+                        <th style="width:45%">Cari Kata (Find)</th>
+                        <th style="width:45%">Pengganti (Replace)</th>
+                        <th style="width:10%"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="rulesTableBody">
+                      <tr>
+                        <td><input type="text" value="{{nama}}" placeholder="Cari..." /></td>
+                        <td><input type="text" value="Budi Santoso" placeholder="Ganti..." /></td>
+                        <td style="text-align:center;"><button class="action-btn-sm" onclick="this.closest('tr').remove()"><i data-lucide="trash-2"></i></button></td>
+                      </tr>
+                      <tr>
+                        <td><input type="text" value="{{tanggal}}" placeholder="Cari..." /></td>
+                        <td><input type="text" value="2026-06-08" placeholder="Ganti..." /></td>
+                        <td style="text-align:center;"><button class="action-btn-sm" onclick="this.closest('tr').remove()"><i data-lucide="trash-2"></i></button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Preview & Output Area -->
+            <div class="preview-container" id="previewAreaReplacer">
+              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom:8px;">
+                <h4>
+                  <i data-lucide="eye"></i>
+                  <span>Processed Output Preview</span>
+                </h4>
+                <button class="tb-btn" onclick="copyReplacerOutput()" style="padding:2px 8px; font-size:11px; border:1px solid var(--border);">Copy Output</button>
+              </div>
+              <div id="replacerOutputText" style="white-space: pre-wrap; font-family: var(--font-mono); font-size:12px; background:var(--bg-editor); padding:10px; border-radius:3px; border:1px solid var(--border); max-height:200px; overflow-y:auto;"></div>
+            </div>
+          </div>
+
+          <!-- TAB 3: TEST CARD GENERATOR -->
+          <div class="tab-panel" id="panelTestCard">
+            <div class="grid-container">
+              <!-- Left panel: File Upload Excel -->
+              <div class="panel-card">
+                <h3>
+                  <i data-lucide="download-cloud" style="color: var(--accent);"></i>
+                  <span>Import Test Case Excel</span>
+                </h3>
+                <div class="file-dropzone" onclick="document.getElementById('fileInputExcelCard').click()">
+                  <i data-lucide="upload"></i>
+                  <span>Upload File Excel Skenario</span>
+                  <p>Unggah berkas .xlsx berisi baris data test case</p>
+                  <input type="file" id="fileInputExcelCard" accept=".xlsx,.xls" style="display:none" onchange="handleExcelCardImport(this.files)" />
+                </div>
+                <div id="cardExcelNameDisplay" style="font-size:12px; color:var(--green); font-family:var(--font-mono); margin-top:4px;"></div>
+              </div>
+
+              <!-- Right panel: Tester & Layout Config -->
+              <div class="panel-card">
+                <h3>
+                  <i data-lucide="settings" style="color: var(--accent);"></i>
+                  <span>Tester &amp; Card Meta</span>
+                </h3>
+                <label for="cardTesterName">Tested By</label>
+                <input type="text" id="cardTesterName" placeholder="Contoh: Rieliams Vamkam" />
+
+                <label for="cardApprovedBy" style="margin-top:8px;">Approved By</label>
+                <input type="text" id="cardApprovedBy" placeholder="Contoh: TIM IT" />
+              </div>
+            </div>
+
+            <!-- Card Preview Section -->
+            <div class="preview-container" id="previewAreaTestCard">
+              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom:8px;">
+                <h4>
+                  <i data-lucide="eye"></i>
+                  <span>Test Cards Preview</span>
+                </h4>
+              </div>
+              <div id="cardsPreviewContainer" class="card-preview-grid">
+                <div style="grid-column: span 3; text-align:center; padding: 20px; color: var(--text-muted);">
+                  Unggah file Excel dan isi nama Tester untuk memunculkan preview kartu test case
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Bottom Console Panel -->
+      <div class="console-panel">
+        <div class="console-tabs">
+          <div class="console-tab active" id="cTabLog">
+            <i data-lucide="terminal"></i> Console Output
+          </div>
+          <div class="console-tab" id="cTabStats">
+            <i data-lucide="bar-chart-2"></i> Stats Manager
+          </div>
+        </div>
+        <div class="console-body" id="consoleBody">
+          <div class="console-log-line">
+            <span class="timestamp">[14:26:00]</span>
+            <span>Studio initialized. Ready for processing.</span>
+          </div>
+        </div>
+        <div class="download-strip" id="downloadArea">
+          <!-- Download buttons will populate here dynamically -->
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    /* ══════════════════════════════════════════════
+       GLOBAL STATE & LOGGING
+     ══════════════════════════════════════════════ */
+    let currentTab = 'autofill';
+    let selectedAutoFillFiles = [];
+    let importedExcelCardData = null;
+
+    const WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+    let cols = [
+      { label: 'Tested By', key: 'tested by', checked: true },
+      { label: 'Approved By', key: 'approved by', checked: true },
+      { label: 'Tester', key: 'tester', checked: false },
+      { label: 'Test By', key: 'test by', checked: false },
+      { label: 'Executed By', key: 'executed by', checked: false },
+      { label: 'Verified By', key: 'verified by', checked: false },
+    ];
+
+    const configValues = {
+      'tested by': '',
+      'approved by': '',
+      'tester': '',
+      'test by': '',
+      'executed by': '',
+      'verified by': '',
+    };
+
+    function writeLog(msg, type = 'info') {
+      const consoleBody = document.getElementById('consoleBody');
+      const timeStr = new Date().toTimeString().split(' ')[0];
+      const div = document.createElement('div');
+      div.className = `console-log-line ${type}`;
+      div.innerHTML = `<span class="timestamp">[${timeStr}]</span> <span>${msg}</span>`;
+      consoleBody.appendChild(div);
+      consoleBody.scrollTop = consoleBody.scrollHeight;
+    }
+
+    function triggerClear() {
+      document.getElementById('consoleBody').innerHTML = '';
+      document.getElementById('downloadArea').innerHTML = '';
+      document.getElementById('downloadArea').classList.remove('visible');
+      writeLog('Console output cleared.');
+    }
+
+    // Floating toast notifications
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.style.background = '#2d2d2d';
+      toast.style.border = '1px solid #3c3c3c';
+      if (type === 'error') {
+        toast.style.borderLeft = '3px solid #f44747';
+      } else if (type === 'success') {
+        toast.style.borderLeft = '3px solid #4ec9b0';
+      } else {
+        toast.style.borderLeft = '3px solid #007acc';
+      }
+      toast.style.color = '#d4d4d4';
+      toast.style.padding = '10px 16px';
+      toast.style.borderRadius = '4px';
+      toast.style.fontSize = '12px';
+      toast.style.display = 'flex';
+      toast.style.alignItems = 'center';
+      toast.style.gap = '8px';
+      toast.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
+      toast.style.minWidth = '280px';
+      toast.style.transition = 'all 0.3s ease';
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(-20px)';
+
+      const icon = document.createElement('i');
+      icon.setAttribute('data-lucide', type === 'error' ? 'alert-triangle' : (type === 'success' ? 'check-circle' : 'info'));
+      icon.style.width = '16px';
+      icon.style.height = '16px';
+      if (type === 'error') icon.style.color = '#f44747';
+      else if (type === 'success') icon.style.color = '#4ec9b0';
+      else icon.style.color = '#007acc';
+
+      const text = document.createElement('span');
+      text.textContent = message;
+
+      toast.appendChild(icon);
+      toast.appendChild(text);
+      container.appendChild(toast);
+      
+      lucide.createIcons();
+
+      setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+      }, 50);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => {
+          toast.remove();
+        }, 300);
+      }, 4000);
+    }
+
+    /* ══════════════════════════════════════════════
+       TAB SYSTEM
+     ══════════════════════════════════════════════ */
+    function activateTab(tabId) {
+      currentTab = tabId;
+
+      // Reset active tab classes
+      document.querySelectorAll('.editor-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tree-item.indent').forEach(i => i.classList.remove('active'));
+
+      // Activate selected
+      if (tabId === 'autofill') {
+        document.getElementById('tabAutoFill').classList.add('active');
+        document.getElementById('panelAutoFill').classList.add('active');
+        document.getElementById('treeAutoFill').classList.add('active');
+      } else if (tabId === 'replacer') {
+        document.getElementById('tabReplacer').classList.add('active');
+        document.getElementById('panelReplacer').classList.add('active');
+        document.getElementById('treeReplacer').classList.add('active');
+      } else if (tabId === 'testcard') {
+        document.getElementById('tabTestCard').classList.add('active');
+        document.getElementById('panelTestCard').classList.add('active');
+        document.getElementById('treeTestCard').classList.add('active');
+      }
+    }
+
+    /* ══════════════════════════════════════════════
+       INPUT VALIDATION & CHECKS
+     ══════════════════════════════════════════════ */
+    function validateExecutionInputs() {
+      if (currentTab === 'autofill') {
+        const hasFiles = selectedAutoFillFiles.length > 0;
+        if (!hasFiles) {
+          return { valid: false, message: 'Harap pilih/upload berkas pengujian terlebih dahulu.' };
+        }
+        
+        const activeCols = cols.filter(c => c.checked);
+        if (activeCols.length === 0) {
+          return { valid: false, message: 'Harap pilih minimal satu target kolom untuk diisi.' };
+        }
+
+        // Pastikan setiap kolom target yang aktif memiliki nilai konfigurasi yang terisi
+        const missingValues = [];
+        activeCols.forEach(col => {
+          const val = configValues[col.key] || '';
+          if (val.trim() === '') {
+            missingValues.push(col.label);
+          }
+        });
+
+        if (missingValues.length > 0) {
+          return { valid: false, message: `Harap isi nilai konfigurasi untuk target kolom: ${missingValues.join(', ')}` };
+        }
+      } else if (currentTab === 'replacer') {
+        const hasText = document.getElementById('replacerSourceText').value.trim() !== '';
+        if (!hasText) {
+          return { valid: false, message: 'Harap tempel data teks sumber (Source Text / Input).' };
+        }
+      } else if (currentTab === 'testcard') {
+        const hasTester = document.getElementById('cardTesterName').value.trim() !== '';
+        const hasData = importedExcelCardData !== null;
+        if (!hasData) {
+          return { valid: false, message: 'Harap unggah file Excel skenario pengujian.' };
+        }
+        if (!hasTester) {
+          return { valid: false, message: 'Harap masukkan nama Tester (Tested By).' };
+        }
+      }
+      return { valid: true };
+    }
+
+    /* ══════════════════════════════════════════════
+       TAB 1: AUTO FILL TESTER LOGIC
+     ═══════════════════════════════════════════════ */
+    let previewExcelRows = null;
+    let previewHeaderRowIndex = 0;
+    let previewStartIdx = 0;
+
+    function updateExcelPreviewLive() {
+      if (!previewExcelRows || previewExcelRows.length === 0) return;
+
+      const activeCols = cols.filter(c => c.checked);
+
+      // Tampilkan 15 baris mulai dari 1 baris sebelum header utama
+      const rowsToShow = previewExcelRows.slice(previewStartIdx, previewStartIdx + 15);
+
+      let html = '<table style="width:100%; border-collapse:collapse; font-size:11px;">';
+      rowsToShow.forEach((row, relativeIdx) => {
+        const actualRowIdx = previewStartIdx + relativeIdx;
+        const isHeader = actualRowIdx === previewHeaderRowIndex;
+
+        // Cek apakah baris ini memuat target kolom yang dicentang
+        const firstCellVal = String(row[0] || '').trim().toLowerCase();
+        const matchedCol = activeCols.find(c => firstCellVal.includes(c.key));
+
+        html += `<tr style="${isHeader ? 'background: var(--bg-sidebar); font-weight: bold; color: var(--text-bright);' : ''}">`;
+        
+        // Tampilkan minimal 10 kolom atau sepanjang baris yang ada
+        const maxCols = Math.max(10, row.length);
+        for (let colIdx = 0; colIdx < maxCols; colIdx++) {
+          const cellVal = row[colIdx];
+          let displayVal = cellVal !== undefined ? cellVal : '';
+          let isFilledPreview = false;
+
+          // Jika baris ini merupakan target pengisian, dan sel setelah kolom A kosong/belum diisi
+          if (matchedCol && colIdx > 0 && (cellVal === undefined || String(cellVal).trim() === '')) {
+            const fillVal = configValues[matchedCol.key] || '';
+            if (fillVal) {
+              displayVal = fillVal;
+              isFilledPreview = true;
+            }
+          }
+
+          let style = 'border:1px solid var(--border); padding:6px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+          if (isFilledPreview) {
+            style += 'background: rgba(78, 201, 176, 0.15); color: var(--green); border: 1.5px dashed var(--green); font-weight: 500;';
+          }
+
+          html += `<td style="${style}">${displayVal}</td>`;
+        }
+        
+        html += '</tr>';
+      });
+      html += '</table>';
+
+      document.getElementById('previewTableContent').innerHTML = html;
+      document.getElementById('previewAreaAutoFill').classList.add('visible');
+    }
+
+    function renderConfigInputs() {
+      const container = document.getElementById('dynamicConfigInputs');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const activeCols = cols.filter(c => c.checked);
+
+      if (activeCols.length === 0) {
+        container.innerHTML = '<div style="font-size: 11px; color: var(--text-muted); padding: 8px 0; text-align: center;">Centang target kolom di sebelah kiri untuk mengisi nilai.</div>';
+        return;
+      }
+
+      activeCols.forEach((col, idx) => {
+        const key = col.key;
+        if (configValues[key] === undefined) {
+          configValues[key] = '';
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '10px';
+
+        const label = document.createElement('label');
+        label.style.display = 'block';
+        label.style.marginBottom = '4px';
+        label.style.fontSize = '10.5px';
+        label.style.fontWeight = '600';
+        label.style.textTransform = 'uppercase';
+        label.style.color = 'var(--text-muted)';
+        label.textContent = col.label;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = configValues[key];
+        input.placeholder = `Masukkan nilai untuk ${col.label}...`;
+        input.addEventListener('input', (e) => {
+          configValues[key] = e.target.value;
+          updateExcelPreviewLive();
+        });
+
+        wrapper.appendChild(label);
+        wrapper.appendChild(input);
+        container.appendChild(wrapper);
+      });
+    }
+
+    function renderChips() {
+      const container = document.getElementById('chipsContainer');
+      container.innerHTML = '';
+      cols.forEach((col, idx) => {
+        const div = document.createElement('div');
+        div.className = `chip ${col.checked ? 'active' : ''}`;
+        div.innerHTML = `<input type="checkbox" ${col.checked ? 'checked' : ''} /> <span>${col.label}</span>`;
+        div.querySelector('input').addEventListener('change', (e) => {
+          col.checked = e.target.checked;
+          div.classList.toggle('active', col.checked);
+          renderConfigInputs(); // Live update configuration input fields!
+          updateExcelPreviewLive(); // Live update preview table!
+        });
+        container.appendChild(div);
+      });
+    }
+    renderChips();
+    renderConfigInputs(); // Initial render config fields!
+
+    function addCustomTargetColumn() {
+      const input = document.getElementById('customColumnInput');
+      const val = input.value.trim();
+      if (!val) return;
+      const key = val.toLowerCase();
+      cols.push({ label: val, key: key, checked: true });
+      configValues[key] = '';
+      input.value = '';
+      renderChips();
+      renderConfigInputs();
+      updateExcelPreviewLive();
+      writeLog(`Custom column target added: "${val}"`);
+    }
+
+    function handleAutoFillFiles(files) {
+      selectedAutoFillFiles = Array.from(files);
+      updateSidebarFilesList(selectedAutoFillFiles);
+      writeLog(`${selectedAutoFillFiles.length} file(s) selected for Auto Fill.`);
+
+      if (selectedAutoFillFiles.length > 0) {
+        const firstFile = selectedAutoFillFiles[0];
+        if (firstFile.name.endsWith('.xlsx') || firstFile.name.endsWith('.xls')) {
+          generateExcelPreview(firstFile);
+        } else {
+          document.getElementById('previewAreaAutoFill').classList.remove('visible');
+        }
+      }
+    }
+
+    function updateSidebarFilesList(files) {
+      const area = document.getElementById('sidebarFilesArea');
+      area.innerHTML = '';
+      if (files.length === 0) {
+        area.innerHTML = '<div style="padding: 4px 20px; font-size:11px; color: var(--text-muted);">No files loaded</div>';
+        return;
+      }
+      files.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'tree-item indent';
+        const isDoc = f.name.endsWith('.docx');
+        const iconHtml = isDoc 
+          ? '<i data-lucide="file-text" style="color:#569cd6; width:12px; height:12px;"></i>' 
+          : '<i data-lucide="file-spreadsheet" style="color:#4ec9b0; width:12px; height:12px;"></i>';
+        item.innerHTML = `<span class="icon">${iconHtml}</span> <span>${f.name}</span>`;
+        area.appendChild(item);
+      });
+      lucide.createIcons();
+    }
+
+    async function generateExcelPreview(file) {
+      try {
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data, { type: 'array' });
+        const sheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const allRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        if (allRows.length === 0) return;
+
+        // Cari baris header utama (mengandung kata kunci 'NO' / 'Function')
+        let headerRowIndex = 0;
+        for (let i = 0; i < Math.min(allRows.length, 25); i++) {
+          const row = allRows[i];
+          if (row && row.some(cell => {
+            const cellStr = String(cell || '').trim().toUpperCase();
+            return cellStr === 'NO' || cellStr === 'NO TEST CASE' || cellStr === 'ID' || cellStr === 'FUNCTION';
+          })) {
+            headerRowIndex = i;
+            break;
+          }
+        }
+
+        previewExcelRows = allRows;
+        previewHeaderRowIndex = headerRowIndex;
+        previewStartIdx = Math.max(0, headerRowIndex - 1);
+
+        updateExcelPreviewLive();
+      } catch (err) {
+        writeLog(`Error generating preview: ${err.message}`, 'error');
+      }
+    }
+
+    /* ══════════════════════════════════════════════
+       TAB 2: WORD REPLACER LOGIC
+     ═══════════════════════════════════════════════ */
+    function addReplacerRow() {
+      const tbody = document.getElementById('rulesTableBody');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" placeholder="Cari..." /></td>
+        <td><input type="text" placeholder="Ganti..." /></td>
+        <td style="text-align:center;">
+          <button class="action-btn-sm" onclick="this.closest('tr').remove()">
+            <i data-lucide="trash-2"></i>
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+      lucide.createIcons();
+    }
+
+    function processReplacements() {
+      const sourceText = document.getElementById('replacerSourceText').value;
+      if (!sourceText.trim()) return;
+
+      const tbody = document.getElementById('rulesTableBody');
+      const rows = tbody.querySelectorAll('tr');
+      const rules = [];
+
+      rows.forEach(r => {
+        const inputs = r.querySelectorAll('input');
+        const findVal = inputs[0].value;
+        const replaceVal = inputs[1].value;
+        if (findVal) {
+          rules.push({ find: findVal, replace: replaceVal });
+        }
+      });
+
+      let output = sourceText;
+
+      const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      rules.forEach(rule => {
+        const escapedFind = escapeRegExp(rule.find);
+        const regex = new RegExp(escapedFind, 'g');
+        output = output.replace(regex, rule.replace);
+      });
+
+      // Render highlight output (for HTML preview)
+      let highlightedOutput = sourceText;
+      rules.forEach(rule => {
+        const escapedFind = escapeRegExp(rule.find);
+        const regex = new RegExp(escapedFind, 'g');
+        const span = `<span class="replace-highlight">${rule.replace}</span>`;
+        highlightedOutput = highlightedOutput.replace(regex, span);
+      });
+
+      document.getElementById('replacerOutputText').innerHTML = highlightedOutput;
+      document.getElementById('previewAreaReplacer').classList.add('visible');
+
+      writeLog(`Executed ${rules.length} replacement rules successfully. Output ready.`, 'success');
+      showToast('Word Replacement berhasil dieksekusi!', 'success');
+
+      // Add single text download option
+      const downloadArea = document.getElementById('downloadArea');
+      downloadArea.classList.add('visible');
+      downloadArea.innerHTML = '';
+
+      const btn = document.createElement('button');
+      btn.className = 'tb-btn primary';
+      btn.innerHTML = '<i data-lucide="download"></i> Download Replaced Text (.txt)';
+      btn.onclick = () => {
+        const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'replaced_test_cases.txt';
+        a.click();
+      };
+      downloadArea.appendChild(btn);
+      lucide.createIcons();
+    }
+
+    function copyReplacerOutput() {
+      const el = document.createElement('textarea');
+      el.value = document.getElementById('replacerOutputText').innerText;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      writeLog('Output text copied to clipboard.', 'success');
+      showToast('Preview teks berhasil disalin ke clipboard.', 'success');
+    }
+
+    /* ══════════════════════════════════════════════
+       TAB 3: TEST CARD GENERATOR LOGIC
+     ═══════════════════════════════════════════════ */
+    async function handleExcelCardImport(files) {
+      if (files.length === 0) return;
+      const file = files[0];
+      document.getElementById('cardExcelNameDisplay').textContent = `📁 ${file.name}`;
+      writeLog(`Reading Excel scenario file: ${file.name}`);
+
+      try {
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data, { type: 'array' });
+        const sheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+
+        // Membaca baris-baris data dari Excel
+        const allData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        let headerRowIndex = -1;
+        let headers = [];
+
+        // Menemukan baris header utama (seperti baris ke-11)
+        for (let i = 0; i < allData.length; i++) {
+          const row = allData[i];
+          if (row && row.some(cell => {
+            const cellStr = String(cell || '').trim().toUpperCase();
+            return cellStr === 'NO' || cellStr === 'NO TEST CASE' || cellStr === 'ID' || cellStr === 'FUNCTION';
+          })) {
+            headerRowIndex = i;
+            headers = row.map(h => String(h || '').trim());
+            break;
+          }
+        }
+
+        if (headerRowIndex === -1) {
+          // Fallback parser jika tidak ditemukan header khusus
+          importedExcelCardData = XLSX.utils.sheet_to_json(ws);
+          writeLog('Warning: Kolom ID/NO tidak ditemukan. Menggunakan fallback parser.', 'warn');
+        } else {
+          const parsedRows = [];
+          for (let i = headerRowIndex + 1; i < allData.length; i++) {
+            const row = allData[i];
+            if (!row || row.length === 0) continue;
+            if (row.every(c => c === null || c === undefined || c === '')) continue; // Lewati baris kosong
+
+            const obj = {};
+            headers.forEach((header, colIdx) => {
+              if (header) {
+                obj[header] = row[colIdx] !== undefined ? row[colIdx] : '';
+              }
+            });
+            parsedRows.push(obj);
+          }
+          importedExcelCardData = parsedRows;
+        }
+
+        writeLog(`Successfully loaded ${importedExcelCardData.length} test case rows from Excel.`, 'success');
+        showToast(`Berhasil membaca ${importedExcelCardData.length} skenario pengujian!`, 'success');
+        
+        renderCardPreviews();
+      } catch (err) {
+        writeLog(`Failed to import Excel: ${err.message}`, 'error');
+        showToast('Gagal memproses berkas Excel.', 'error');
+        console.error(err);
+      }
+    }
+
+    function renderCardPreviews() {
+      const container = document.getElementById('cardsPreviewContainer');
+      container.innerHTML = '';
+
+      if (!importedExcelCardData || importedExcelCardData.length === 0) {
+        container.innerHTML = `<div style="grid-column: span 3; text-align:center; padding: 20px; color: var(--text-muted);">Unggah file Excel dan isi nama Tester untuk memunculkan preview kartu test case</div>`;
+        return;
+      }
+
+      const tester = document.getElementById('cardTesterName').value.trim() || 'Liam';
+      const approved = document.getElementById('cardApprovedBy').value.trim() || 'TIM IT';
+
+      importedExcelCardData.slice(0, 6).forEach(row => {
+        // Normalise fields
+        const testCaseNo = row['NO'] || row['No Test Case'] || row['ID'] || 'TCM001';
+        const functionName = row['Function'] || row['Fungsi'] || 'Login';
+        const scenario = row['Scenario'] || row['Skenario'] || '';
+        const actualResult = row['Actual Result'] || row['Hasil Aktual'] || 'Sesuai';
+        const status = row['Status'] || 'Success';
+        const expectedResult = row['Expected Result'] || row['Hasil Ekspektasi'] || '';
+
+        // Status / Result Formatting with Strikethrough for FAILED
+        const isSuccess = String(status).toLowerCase().includes('success') || String(status).toLowerCase().includes('pass');
+        const statusText = isSuccess ? 'SUCCESS / <s>FAILED</s>' : '<s>SUCCESS</s> / FAILED';
+        const resultText = isSuccess ? 'PASSED / <s>FAILED</s>' : '<s>PASSED</s> / FAILED';
+
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'case-card';
+        cardDiv.innerHTML = `
+          <table class="case-card-table">
+            <tr><td class="label-cell">No Test Case</td><td>${testCaseNo}</td></tr>
+            <tr><td class="label-cell">Function</td><td>${functionName}</td></tr>
+            <tr><td class="label-cell">Scenario</td><td>${scenario}</td></tr>
+            <tr><td class="label-cell">Actual Result</td><td>${actualResult}</td></tr>
+            <tr><td class="label-cell">Status</td><td class="strike-failed">${statusText}</td></tr>
+            <tr><td class="label-cell">Expected Result</td><td>${expectedResult}</td></tr>
+            <tr><td class="label-cell">Screen Capture</td><td><div class="capture-box"></div></td></tr>
+            <tr><td class="label-cell">Result</td><td class="strike-failed">${resultText}</td></tr>
+            <tr><td class="label-cell">Tested By</td><td>${tester}</td></tr>
+            <tr><td class="label-cell">Approved By</td><td>${approved}</td></tr>
+          </table>
+        `;
+        container.appendChild(cardDiv);
+      });
+
+      if (importedExcelCardData.length > 6) {
+        const item = document.createElement('div');
+        item.style.gridHeader = 'span 3';
+        item.style.textAlign = 'center';
+        item.style.fontSize = '11px';
+        item.style.color = 'var(--text-muted)';
+        item.textContent = `... dan ${importedExcelCardData.length - 6} kartu lainnya ...`;
+        container.appendChild(item);
+      }
+
+      document.getElementById('previewAreaTestCard').classList.add('visible');
+    }
+
+    // Bind inputs to re-trigger card rendering
+    document.getElementById('cardTesterName').addEventListener('input', renderCardPreviews);
+    document.getElementById('cardApprovedBy').addEventListener('input', renderCardPreviews);
+
+    /* ══════════════════════════════════════════════
+       CORE EXECUTION TRIGGERS
+     ═══════════════════════════════════════════════ */
+    function triggerExecution() {
+      const check = validateExecutionInputs();
+      if (!check.valid) {
+        writeLog(`Eksekusi gagal: ${check.message}`, 'error');
+        showToast(check.message, 'error');
+        return;
+      }
+
+      writeLog(`Executing action for module: ${currentTab.toUpperCase()}...`);
+      if (currentTab === 'autofill') {
+        processAutoFill();
+      } else if (currentTab === 'replacer') {
+        processReplacements();
+      } else if (currentTab === 'testcard') {
+        processTestCardWordGeneration();
+      }
+    }
+
+    /* ══════════════════════════════════════════════
+       AUTO FILL FUNCTIONALITY (EXCEL & WORD)
+     ═══════════════════════════════════════════════ */
+    async function processAutoFill() {
+      const activeCols = cols.filter(c => c.checked);
+
+      writeLog(`Running auto-fill task...`);
+
+      let totalFilled = 0;
+      let filesProcessed = 0;
+      const downloadArea = document.getElementById('downloadArea');
+      downloadArea.innerHTML = '';
+      downloadArea.classList.add('visible');
+
+      for (const file of selectedAutoFillFiles) {
+        const isDocx = file.name.endsWith('.docx');
+        const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+        try {
+          if (isXlsx) {
+            const result = await processXlsxFile(file, activeCols);
+            totalFilled += result.filledCount;
+            filesProcessed++;
+            createDownloadButton(result.blob, file.name.replace(/\.(xlsx?)$/i, '_filled.xlsx'));
+          } else if (isDocx) {
+            const result = await processDocxFile(file, activeCols);
+            totalFilled += result.filledCount;
+            filesProcessed++;
+            createDownloadButton(result.blob, file.name.replace(/\.(docx)$/i, '_filled.docx'));
+          }
+        } catch (err) {
+          writeLog(`Error processing file ${file.name}: ${err.message}`, 'error');
+          console.error(err);
+        }
+      }
+
+      writeLog(`Auto Fill complete! Processed ${filesProcessed} files, filled ${totalFilled} empty cells.`, 'success');
+      showToast(`Auto Fill sukses mengisi ${totalFilled} sel kosong!`, 'success');
+    }
+
+    async function processXlsxFile(file, activeCols) {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: 'array' });
+      let filledCount = 0;
+
+      wb.SheetNames.forEach(shName => {
+        const ws = wb.Sheets[shName];
+        const ref = ws['!ref'];
+        if (!ref) return;
+        const range = XLSX.utils.decode_range(ref);
+
+        for (let R = range.s.r; R <= range.e.r; R++) {
+          const labelCell = ws[XLSX.utils.encode_cell({ r: R, c: 0 })];
+          if (!labelCell) continue;
+          const cellVal = String(labelCell.v || '').trim().toLowerCase();
+          const match = activeCols.find(c => cellVal.includes(c.key));
+          if (!match) continue;
+
+          const fillVal = configValues[match.key] || '';
+
+          for (let C = 1; C <= range.e.c; C++) {
+            const addr = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = ws[addr];
+            const isEmpty = !cell || cell.v === '' || cell.v === null || cell.v === undefined;
+            if (isEmpty) {
+              ws[addr] = { t: 's', v: fillVal };
+              filledCount++;
+            }
+          }
+        }
+      });
+
+      const wbOut = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbOut], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      return { blob, filledCount };
+    }
+
+    async function processDocxFile(file, activeCols) {
+      const data = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(data);
+      const docXmlStr = await zip.file('word/document.xml').async('string');
+
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(docXmlStr, 'application/xml');
+      let filledCount = 0;
+
+      const allRows = xmlDoc.getElementsByTagNameNS(WNS, 'tr');
+      for (let ri = 0; ri < allRows.length; ri++) {
+        const row = allRows[ri];
+        const cells = row.getElementsByTagNameNS(WNS, 'tc');
+        if (cells.length < 2) continue;
+
+        const labelText = getCellText(cells[0]).toLowerCase();
+        const match = activeCols.find(c => labelText.includes(c.key));
+        if (!match) continue;
+
+        const fillVal = configValues[match.key] || '';
+
+        for (let ci = 1; ci < cells.length; ci++) {
+          const cellText = getCellText(cells[ci]);
+          if (!cellText) {
+            setCellText(cells[ci], fillVal, xmlDoc);
+            filledCount++;
+          }
+        }
+      }
+
+      const serializer = new XMLSerializer();
+      const newXml = serializer.serializeToString(xmlDoc);
+      zip.file('word/document.xml', newXml);
+
+      const blob = await zip.generateAsync({
+        type: 'blob',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      });
+
+      return { blob, filledCount };
+    }
+
+    function getCellText(cell) {
+      const texts = cell.getElementsByTagNameNS(WNS, 't');
+      return Array.from(texts).map(t => t.textContent).join('').trim();
+    }
+
+    function setCellText(cell, text, xmlDoc) {
+      const paras = cell.getElementsByTagNameNS(WNS, 'p');
+      for (let p of paras) {
+        const runs = Array.from(p.getElementsByTagNameNS(WNS, 'r'));
+        runs.forEach(r => r.parentNode.removeChild(r));
+      }
+
+      let para = paras[0];
+      if (!para) {
+        para = xmlDoc.createElementNS(WNS, 'w:p');
+        cell.appendChild(para);
+      }
+
+      const run = xmlDoc.createElementNS(WNS, 'w:r');
+      const t = xmlDoc.createElementNS(WNS, 'w:t');
+      t.setAttribute('xml:space', 'preserve');
+      t.textContent = text;
+      run.appendChild(t);
+      para.appendChild(run);
+    }
+
+    function createDownloadButton(blob, filename) {
+      const container = document.getElementById('downloadArea');
+      const btn = document.createElement('button');
+      btn.className = 'tb-btn';
+      btn.style.border = '1px solid var(--accent)';
+      btn.style.background = 'rgba(0, 122, 204, 0.15)';
+      btn.innerHTML = `<i data-lucide="download"></i> ${filename}`;
+      btn.onclick = () => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+      container.appendChild(btn);
+      lucide.createIcons();
+    }
+
+    /* ══════════════════════════════════════════════
+       WORD TEST CARD GENERATION ENGINE (JSZIP)
+     ═══════════════════════════════════════════════ */
+    async function processTestCardWordGeneration() {
+      if (!importedExcelCardData || importedExcelCardData.length === 0) {
+        writeLog('Error: Data Excel kosong atau belum di-upload.', 'error');
+        return;
+      }
+
+      const tester = document.getElementById('cardTesterName').value.trim();
+      const approved = document.getElementById('cardApprovedBy').value.trim() || 'TIM IT';
+
+      writeLog(`Generating Word Document with ${importedExcelCardData.length} Test Cards...`);
+
+      try {
+        const zip = new JSZip();
+
+        // 1. [Content_Types].xml
+        zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`);
+
+        // 2. _rels/.rels
+        zip.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
+
+        // 3. word/_rels/document.xml.rels
+        zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`);
+
+        // 4. word/styles.xml
+        zip.file("word/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:docDefaults>
+    <w:rPrDefault>
+      <w:rPr>
+        <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
+        <w:sz w:val="22"/>
+      </w:rPr>
+    </w:rPrDefault>
+  </w:docDefaults>
+</w:styles>`);
+
+        // Build document body with tables
+        let documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>`;
+
+        importedExcelCardData.forEach((row, index) => {
+          // Normalize row values
+          const tcNo = escapeXml(row['NO'] || row['No Test Case'] || row['ID'] || `TC-${index+1}`);
+          const func = escapeXml(row['Function'] || row['Fungsi'] || '-');
+          const scen = escapeXml(row['Scenario'] || row['Skenario'] || '-');
+          const act = escapeXml(row['Actual Result'] || row['Hasil Aktual'] || 'Sesuai');
+          const stat = escapeXml(row['Status'] || 'Success');
+          const exp = escapeXml(row['Expected Result'] || row['Hasil Ekspektasi'] || '-');
+
+          // Status & Result formatted strikethrough check
+          const isSuccess = stat.toLowerCase().includes('success') || stat.toLowerCase().includes('pass');
+
+          // Generate tables
+          documentXml += `
+    <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>TEST CARD CASE - EVIDENCE</w:t></w:r></w:p>
+    <w:p><w:pPr><w:spacing w:after="120"/></w:pPr></w:p>
+    <w:tbl>
+      <w:tblPr>
+        <w:tblW w:w="5000" w:type="pct"/>
+        <w:tblBorders>
+          <w:top w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+          <w:left w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+          <w:bottom w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+          <w:right w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="DDDDDD"/>
+          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="DDDDDD"/>
+        </w:tblBorders>
+      </w:tblPr>
+      <w:tblGrid>
+        <w:gridCol w:w="2500"/>
+        <w:gridCol w:w="5500"/>
+      </w:tblGrid>
+      
+      <!-- Row 1: No Test Case -->
+      ${createWordTableRow("No Test Case", tcNo)}
+
+      <!-- Row 2: Function -->
+      ${createWordTableRow("Function", func)}
+
+      <!-- Row 3: Scenario -->
+      ${createWordTableRow("Scenario", scen)}
+
+      <!-- Row 4: Actual Result -->
+      ${createWordTableRow("Actual Result", act)}
+
+      <!-- Row 5: Status -->
+      ${createWordTableRowWithStrikethrough("Status", "SUCCESS", "FAILED", isSuccess)}
+
+      <!-- Row 6: Expected Result -->
+      ${createWordTableRow("Expected Result", exp)}
+
+      <!-- Row 7: Screen Capture (empty large cell) -->
+      <w:tr>
+        <w:trPr><w:cantSplit/></w:trPr>
+        <w:tc>
+          <w:tcPr>
+            <w:shd w:fill="F2F2F2"/>
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
+          <w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Screen Capture</w:t></w:r></w:p>
+        </w:tc>
+        <w:tc>
+          <w:tcPr><w:vAlign w:val="center"/></w:tcPr>
+          <w:p>
+            <w:pPr><w:spacing w:before="600" w:after="600"/></w:pPr>
+            <w:r><w:rPr><w:color w:val="999999"/><w:sz w:val="18"/></w:rPr><w:t> ( Paste image evidence here ) </w:t></w:r>
+          </w:p>
+        </w:tc>
+      </w:tr>
+
+      <!-- Row 8: Result -->
+      ${createWordTableRowWithStrikethrough("Result", "PASSED", "FAILED", isSuccess)}
+
+      <!-- Row 9: Tested By -->
+      ${createWordTableRow("Tested By", escapeXml(tester))}
+
+      <!-- Row 10: Approved By -->
+      ${createWordTableRow("Approved By", escapeXml(approved))}
+
+    </w:tbl>
+    
+    <!-- Page Break for all except the last item -->
+    ${index < importedExcelCardData.length - 1 ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : ''}
+    `;
+        });
+
+        documentXml += `
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+
+        zip.file("word/document.xml", documentXml);
+
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const downloadName = 'Test_Cards_Evidence.docx';
+        createDownloadButton(blob, downloadName);
+
+        // Auto trigger download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = downloadName;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        writeLog(`Successfully generated and downloaded "${downloadName}" with ${importedExcelCardData.length} cards.`, 'success');
+        showToast(`Test Card .docx berhasil digenerate (${importedExcelCardData.length} kartu)!`, 'success');
+      } catch (err) {
+        writeLog(`Failed to generate Word document: ${err.message}`, 'error');
+        showToast('Gagal menghasilkan dokumen Test Card.', 'error');
+        console.error(err);
+      }
+    }
+
+    function createWordTableRow(label, value) {
+      return `
+      <w:tr>
+        <w:trPr><w:cantSplit/></w:trPr>
+        <w:tc>
+          <w:tcPr>
+            <w:shd w:fill="F2F2F2"/>
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
+          <w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>${label}</w:t></w:r></w:p>
+        </w:tc>
+        <w:tc>
+          <w:tcPr><w:vAlign w:val="center"/></w:tcPr>
+          <w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${value}</w:t></w:r></w:p>
+        </w:tc>
+      </w:tr>`;
+    }
+
+    function createWordTableRowWithStrikethrough(label, option1, option2, choose1) {
+      const strike1 = choose1 ? '' : '<w:strike/>';
+      const strike2 = choose1 ? '<w:strike/>' : '';
+      const color1 = choose1 ? '000000' : '999999';
+      const color2 = choose1 ? '999999' : '000000';
+
+      return `
+      <w:tr>
+        <w:trPr><w:cantSplit/></w:trPr>
+        <w:tc>
+          <w:tcPr>
+            <w:shd w:fill="F2F2F2"/>
+            <w:vAlign w:val="center"/>
+          </w:tcPr>
+          <w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>${label}</w:t></w:r></w:p>
+        </w:tc>
+        <w:tc>
+          <w:tcPr><w:vAlign w:val="center"/></w:tcPr>
+          <w:p>
+            <w:r>
+              <w:rPr>${strike1}<w:color w:val="${color1}"/><w:sz w:val="20"/></w:rPr>
+              <w:t>${option1}</w:t>
+            </w:r>
+            <w:r>
+              <w:rPr><w:color w:val="999999"/><w:sz w:val="20"/></w:rPr>
+              <w:t> / </w:t>
+            </w:r>
+            <w:r>
+              <w:rPr>${strike2}<w:color w:val="${color2}"/><w:sz w:val="20"/></w:rPr>
+              <w:t>${option2}</w:t>
+            </w:r>
+          </w:p>
+        </w:tc>
+      </w:tr>`;
+    }
+
+    // Escape special characters helper for Word XML injection
+    function escapeXml(unsafe) {
+      if (typeof unsafe !== 'string') unsafe = String(unsafe || '');
+      return unsafe.replace(/[<>&'"]/g, function (c) {
+        switch (c) {
+          case '<': return '&lt;';
+          case '>': return '&gt;';
+          case '&': return '&amp;';
+          case '\'': return '&apos;';
+          case '"': return '&quot;';
+        }
+      });
+    }
+
+    // Initialize Lucide Icons on load
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+    });
+  </script>
+
+</body>
+
+</html>
