@@ -860,10 +860,49 @@
     /* ══════════════════════════════════════════════
        WORD TEST CARD GENERATION ENGINE (JSZIP)
      ═══════════════════════════════════════════════ */
+
+    // Map global penyimpanan gambar: key = nama file tanpa ekstensi (lowercase), value = { file, ext }
+    let screenCaptureMap = new Map();
+
+    /**
+     * Handler: Membaca file-file gambar yang dipilih oleh user dan menyimpannya ke screenCaptureMap.
+     */
+    function handleScreenCaptureImages(files) {
+      if (!files || files.length === 0) return;
+      screenCaptureMap = new Map(); // Reset setiap kali user memilih ulang
+
+      Array.from(files).forEach(f => {
+        const nameParts = f.name.split('.');
+        const ext = nameParts.pop().toLowerCase();
+        const baseName = nameParts.join('.').toLowerCase().trim(); // Nama file tanpa ekstensi, lowercase
+        screenCaptureMap.set(baseName, { file: f, ext });
+      });
+
+      // Tampilkan path folder (ambil dari file pertama -> webkitRelativePath contoh: "FolderSaya/11.png")
+      const folderPathEl = document.getElementById('folderPathDisplay');
+      if (folderPathEl && files.length > 0) {
+        const samplePath = files[0].webkitRelativePath || files[0].name;
+        const folderName = samplePath.includes('/') ? samplePath.split('/')[0] : '(folder lokal)';
+        folderPathEl.textContent = `📁 ${folderName}  (${screenCaptureMap.size} file gambar)`;
+        folderPathEl.style.color = 'var(--green)';
+      }
+
+      // Tampilkan daftar nama file (parameter) yang bisa digunakan
+      const statusEl = document.getElementById('screenCaptureStatus');
+      if (statusEl) {
+        const keys = Array.from(screenCaptureMap.keys());
+        const listHtml = keys.map(k => {
+          const { ext } = screenCaptureMap.get(k);
+          return `<span style="display:inline-block; background:rgba(78,201,176,0.1); border:1px solid var(--green); border-radius:3px; padding:1px 5px; margin:1px; color:var(--green);">${k}</span>`;
+        }).join(' ');
+        statusEl.innerHTML = `<div style="margin-bottom:4px; color:var(--text-muted);">Parameter tersedia (gunakan nama ini di kolom <strong>Screen Capture</strong> Excel):</div>${listHtml}`;
+      }
+
+      writeLog(`[Screen Capture] Folder dimuat: ${screenCaptureMap.size} gambar ditemukan — ${Array.from(screenCaptureMap.keys()).join(', ')}`);
+    }
+
     /**
      * 1. FUNGSI UTAMA: Memproses File Excel dan Mengonversinya ke Word (.docx)
-     * Fungsi ini dipanggil saat tombol ekskusi (misal: triggerExecution) ditekan.
-     * Membaca data dari SheetJS dan mengopernya ke generator XML Word.
      */
     async function processExcelToTestCards() {
       const fileInput = document.getElementById('fileInputExcelCard');
@@ -906,9 +945,12 @@
 
           logToConsole("INFO", `Berhasil mengekstrak ${sheetData.length} baris data test case.`);
 
-          // Panggil fungsi generator Word menggunakan JSZip
+          // Panggil fungsi generator Word menggunakan JSZip, sertakan imageMap
           logToConsole("INFO", "Sedang menyusun komponen struktur tabel OpenXML Word...");
-          const docxBlob = await generateTestCardDocument(sheetData, testerName, approvedBy);
+          if (screenCaptureMap.size > 0) {
+            logToConsole("INFO", `Ditemukan ${screenCaptureMap.size} gambar Screen Capture untuk disisipkan.`);
+          }
+          const docxBlob = await generateTestCardDocument(sheetData, testerName, approvedBy, screenCaptureMap);
 
           // Sediakan tombol unduh secara dinamis di area download strip UI
           if (downloadArea) {
@@ -940,24 +982,112 @@
 
 
     /**
-     * 2. CORE CORE ENGINE: Generator Dokumen DOCX via XML OPC Menggunakan JSZip
-     * Membentuk tabel berpasangan (Key-Value) dan layouting sel sesuai rujukan MySAU Mobile.
+     * 2. CORE ENGINE: Generator Dokumen DOCX via XML OPC Menggunakan JSZip
+     * Mendukung penyisipan gambar DrawingML dari imageMap.
      */
-    async function generateTestCardDocument(testCasesData, testerName, approverName) {
+    async function generateTestCardDocument(testCasesData, testerName, approverName, imageMap = new Map()) {
       const zip = new JSZip();
 
-      // A. Definisikan susunan konten relasi tipe konten media ([Content_Types].xml)
+      // Kumpulkan semua gambar yang benar-benar dipakai dalam Excel (agar tidak mendaftarkan yang tidak perlu)
+      const usedImages = []; // Array of { baseName, file, ext, rId, filename }
+      let imgCounter = 0;
+
+      // Pre-scan: cek kolom Screen Capture di semua baris untuk tahu gambar mana yang digunakan
+      testCasesData.forEach(tc => {
+        const rawCapture = tc["Screen Capture"] || tc["screen_capture"] || tc["ScreenCapture"] || '';
+        const captureKey = String(rawCapture).toLowerCase().trim();
+        if (captureKey && imageMap.has(captureKey)) {
+          // Hindari duplikat rId untuk gambar yang sama
+          const alreadyAdded = usedImages.find(u => u.baseName === captureKey);
+          if (!alreadyAdded) {
+            imgCounter++;
+            const { file, ext } = imageMap.get(captureKey);
+            const rId = `rIdImg${imgCounter}`;
+            const filename = `image${imgCounter}.${ext}`;
+            usedImages.push({ baseName: captureKey, file, ext, rId, filename });
+          }
+        }
+      });
+
+      // Baca semua file gambar menjadi ArrayBuffer dan masukkan ke ZIP
+      const imageBuffers = {};
+      for (const img of usedImages) {
+        const buf = await img.file.arrayBuffer();
+        zip.file(`word/media/${img.filename}`, buf);
+        imageBuffers[img.baseName] = img;
+      }
+
+      // Helper: lookup rId dan filename gambar berdasarkan nama parameter Excel
+      const getImageInfo = (captureVal) => {
+        const key = String(captureVal).toLowerCase().trim();
+        return imageBuffers[key] || null;
+      };
+
+      // Helper: buat XML DrawingML untuk embed gambar inline (lebar 5.5cm = 1979800 EMU, tinggi 3.5cm = 1260000 EMU)
+      const makeDrawingXml = (rId) => {
+        const cx = 4500000; // ~5cm lebar
+        const cy = 3375000; // ~3.75cm tinggi (4:3 ratio)
+        return `<w:drawing>
+          <wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+            <wp:extent cx="${cx}" cy="${cy}"/>
+            <wp:effectExtent l="0" t="0" r="0" b="0"/>
+            <wp:docPr id="${Math.floor(Math.random()*9000)+1000}" name="img"/>
+            <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                  <pic:nvPicPr>
+                    <pic:cNvPr id="0" name="img"/>
+                    <pic:cNvPicPr/>
+                  </pic:nvPicPr>
+                  <pic:blipFill>
+                    <a:blip r:embed="${rId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
+                    <a:stretch><a:fillRect/></a:stretch>
+                  </pic:blipFill>
+                  <pic:spPr>
+                    <a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                  </pic:spPr>
+                </pic:pic>
+              </a:graphicData>
+            </a:graphic>
+          </wp:inline>
+        </w:drawing>`;
+      };
+
+      // A. [Content_Types].xml — daftarkan tipe media gambar jika ada
+      const imageExtensions = [...new Set(usedImages.map(i => i.ext))];
+      const imageContentTypes = imageExtensions.map(ext => {
+        const mime = ext === 'jpg' || ext === 'jpeg' ? 'jpeg' : ext;
+        return `<Override PartName="/word/media/image1.${ext}" ContentType="image/${mime}"/>`;
+      });
+      // Buat Default entries untuk setiap ekstensi unik
+      const imageDefaults = imageExtensions.map(ext => {
+        const mime = ext === 'jpg' || ext === 'jpeg' ? 'jpeg' : ext;
+        return `<Default Extension="${ext}" ContentType="image/${mime}"/>`;
+      }).join('\n      ');
+
       zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
       <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
       <Default Extension="xml" ContentType="application/xml"/>
+      ${imageDefaults}
       <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
     </Types>`);
 
-      // B. Definisikan global relationships folder (_rels/.rels)
+      // B. Relasi dokumen utama (_rels/.rels)
       zip.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
       <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+    </Relationships>`);
+
+      // B2. Relasi gambar di word/_rels/document.xml.rels
+      const imageRels = usedImages.map(img =>
+        `<Relationship Id="${img.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${img.filename}"/>`
+      ).join('\n      ');
+
+      zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+      ${imageRels}
     </Relationships>`);
 
       // Ambil nilai UI untuk fitur Batch Override
@@ -978,7 +1108,7 @@
       testCasesData.forEach((tc, index) => {
         const rowNumber = index + 1; // Baris keberapa (1-based)
         
-        // Normalisasi pencarian nama properti kolom dari Excel (Case-Insensitive & Fallback Value)
+        // Normalisasi pencarian nama properti kolom dari Excel
         const noTestCase = tc["No Test Case"] || tc["no_test_case"] || tc["NO"] || tc["ID"] || `TCM${String(rowNumber).padStart(3, '0')}`;
         const functionName = tc["Function"] || tc["function"] || tc["Fungsi"] || "General Function";
         const scenarioBody = tc["Scenario"] || tc["scenario"] || tc["Skenario"] || "User melakukan aktivitas pengujian pada sistem.";
@@ -986,6 +1116,13 @@
         const statusVal = tc["Status"] || tc["status"] || "SUCCESS / FAILED";
         const expectedResult = tc["Expected Result"] || tc["expected_result"] || tc["Hasil Ekspektasi"] || "Sistem merespons sesuai kriteria ekspektasi.";
         const finalResult = tc["Result"] || tc["result"] || "PASSED / FAILED";
+        const screenCapture = tc["Screen Capture"] || tc["screen_capture"] || tc["ScreenCapture"] || '';
+
+        // Resolusi gambar Screen Capture
+        const imgInfo = getImageInfo(screenCapture);
+        const screenCaptureXml = imgInfo
+          ? `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r>${makeDrawingXml(imgInfo.rId)}</w:r></w:p>`
+          : `<w:p><w:pPr><w:spacing w:before="600" w:after="600"/><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:i/><w:color w:val="999999"/><w:sz w:val="18"/></w:rPr><w:t>${screenCapture ? escapeXml(String(screenCapture)) + ' (gambar tidak ditemukan)' : '[ Tempatkan Screenshot Bukti Uji Di Sini ]'}</w:t></w:r></w:p>`;
 
         // Status & Result formatted strikethrough check with Batch Override Logic
         const inRange = rangeType === 'ALL' || (rowNumber >= rangeStart && rowNumber <= rangeEnd);
@@ -1069,10 +1206,7 @@
             <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Screen Capture</w:t></w:r></w:p></w:tc>
             <w:tc>
               <w:tcPr><w:vAlign w:val="center"/></w:tcPr>
-              <w:p>
-                <w:pPr><w:spacing w:before="600" w:after="600"/><w:jc w:val="center"/></w:pPr>
-                <w:r><w:rPr><w:i/><w:color w:val="999999"/><w:sz w:val="18"/></w:rPr><w:t>[ Tempatkan Screenshot Bukti Uji Di Sini ]</w:t></w:r>
-              </w:p>
+              ${screenCaptureXml}
             </w:tc>
           </w:tr>
           

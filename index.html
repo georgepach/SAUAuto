@@ -303,6 +303,41 @@
 
                 <label for="cardApprovedBy" style="margin-top:8px;">Approved By</label>
                 <input type="text" id="cardApprovedBy" placeholder="Contoh: TIM IT" />
+
+                <hr style="border:0; border-top:1px solid var(--border); margin:14px 0;" />
+
+                <h3 style="margin-bottom:8px; border-bottom:none; padding-bottom:0;">
+                  <i data-lucide="image" style="color: var(--accent);"></i>
+                  <span>Screen Capture — Folder Gambar</span>
+                </h3>
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px; line-height:1.6;">
+                  Pilih <strong>folder</strong> berisi file gambar. Sistem akan otomatis mencocokkan nama file (tanpa ekstensi) dengan nilai di kolom <strong style="color:var(--accent);">Screen Capture</strong> pada Excel — sama seperti cara kerja Auto Fill Tester.
+                </p>
+
+                <!-- Folder Path Display -->
+                <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px;">
+                  <div id="folderPathDisplay" style="
+                    flex:1; padding:6px 8px; font-size:11px; font-family:var(--font-mono);
+                    background:var(--bg-editor); border:1px solid var(--border); border-radius:3px;
+                    color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                  ">Belum ada folder dipilih...</div>
+                  <button class="tb-btn" onclick="document.getElementById('fileInputScreenCaptures').click()" style="border:1px solid var(--accent); color:var(--accent); white-space:nowrap; padding:4px 10px;">
+                    <i data-lucide="folder-open"></i> Browse
+                  </button>
+                  <input type="file" id="fileInputScreenCaptures"
+                    accept="image/*"
+                    webkitdirectory
+                    multiple
+                    style="display:none"
+                    onchange="handleScreenCaptureImages(this.files)" />
+                </div>
+
+                <!-- Status area mirip Auto Fill -->
+                <div id="screenCaptureStatus" style="
+                  font-size:11px; font-family:var(--font-mono); color:var(--text-muted);
+                  background:var(--bg-editor); border:1px solid var(--border); border-radius:3px;
+                  padding:6px 8px; min-height:36px; max-height:80px; overflow-y:auto; line-height:1.6;
+                ">Muat folder untuk melihat daftar gambar yang tersedia.</div>
               </div>
             </div>
 
