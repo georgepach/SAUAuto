@@ -308,13 +308,41 @@
 
                 <h3 style="margin-bottom:8px; border-bottom:none; padding-bottom:0;">
                   <i data-lucide="image" style="color: var(--accent);"></i>
-                  <span>Screen Capture — Folder Gambar</span>
+                  <span>Screen Capture — Auto Image Inject</span>
                 </h3>
-                <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px; line-height:1.6;">
-                  Pilih <strong>folder</strong> berisi file gambar. Sistem akan otomatis mencocokkan nama file (tanpa ekstensi) dengan nilai di kolom <strong style="color:var(--accent);">Screen Capture</strong> pada Excel — sama seperti cara kerja Auto Fill Tester.
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:10px; line-height:1.6;">
+                  Pilih <strong>folder</strong> gambar, lalu konfigurasikan <strong style="color:var(--blue);">parameter</strong> (kolom Excel yang nilai-nya dijadikan nama file) dan <strong style="color:var(--accent);">target</strong> (baris di test card tempat gambar disisipkan).
                 </p>
 
-                <!-- Folder Path Display -->
+                <!-- === KONFIGURASI: Parameter & Target === -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                  <div>
+                    <label style="font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--blue); margin-bottom:3px; display:block;">
+                      <i data-lucide="arrow-right-from-line" style="width:10px; height:10px;"></i> Kolom Parameter (Sumber Nama File)
+                    </label>
+                    <select id="imgParamColumn" class="settings-select" style="width:100%;">
+                      <option value="No Test Case">No Test Case</option>
+                      <option value="Screen Capture" selected>Screen Capture</option>
+                      <option value="Function">Function</option>
+                      <option value="Scenario">Scenario</option>
+                      <option value="Status">Status</option>
+                      <option value="__custom__">Custom...</option>
+                    </select>
+                    <input type="text" id="imgParamColumnCustom" placeholder="Nama kolom di Excel..." style="margin-top:4px; display:none; width:100%; box-sizing:border-box;" />
+                  </div>
+                  <div>
+                    <label style="font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--accent); margin-bottom:3px; display:block;">
+                      <i data-lucide="arrow-right-to-line" style="width:10px; height:10px;"></i> Target Baris (Tempat Gambar Disisipkan)
+                    </label>
+                    <select id="imgTargetField" class="settings-select" style="width:100%;">
+                      <option value="Screen Capture" selected>Screen Capture</option>
+                      <option value="Actual Result">Actual Result</option>
+                      <option value="Expected Result">Expected Result</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Folder Browser -->
                 <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px;">
                   <div id="folderPathDisplay" style="
                     flex:1; padding:6px 8px; font-size:11px; font-family:var(--font-mono);
@@ -332,7 +360,7 @@
                     onchange="handleScreenCaptureImages(this.files)" />
                 </div>
 
-                <!-- Status area mirip Auto Fill -->
+                <!-- Status: daftar parameter yang tersedia -->
                 <div id="screenCaptureStatus" style="
                   font-size:11px; font-family:var(--font-mono); color:var(--text-muted);
                   background:var(--bg-editor); border:1px solid var(--border); border-radius:3px;

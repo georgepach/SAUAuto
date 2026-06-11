@@ -126,6 +126,17 @@
       }
     }
 
+    // Listener: tampilkan/sembunyikan input custom kolom parameter gambar
+    document.addEventListener('DOMContentLoaded', () => {
+      const paramColSelect = document.getElementById('imgParamColumn');
+      const paramColCustom = document.getElementById('imgParamColumnCustom');
+      if (paramColSelect && paramColCustom) {
+        paramColSelect.addEventListener('change', () => {
+          paramColCustom.style.display = paramColSelect.value === '__custom__' ? 'block' : 'none';
+        });
+      }
+    });
+
     /* ══════════════════════════════════════════════
        INPUT VALIDATION & CHECKS
      ══════════════════════════════════════════════ */
@@ -992,9 +1003,19 @@
       const usedImages = []; // Array of { baseName, file, ext, rId, filename }
       let imgCounter = 0;
 
-      // Pre-scan: cek kolom Screen Capture di semua baris untuk tahu gambar mana yang digunakan
+      // === Baca konfigurasi Image Inject dari UI ===
+      const imgParamColSelect = document.getElementById('imgParamColumn');
+      const imgParamColCustom = document.getElementById('imgParamColumnCustom');
+      let imgParamCol = imgParamColSelect ? imgParamColSelect.value : 'Screen Capture';
+      if (imgParamCol === '__custom__') {
+        imgParamCol = imgParamColCustom ? imgParamColCustom.value.trim() : 'Screen Capture';
+      }
+      const imgTargetFieldSelect = document.getElementById('imgTargetField');
+      const imgTargetField = imgTargetFieldSelect ? imgTargetFieldSelect.value : 'Screen Capture';
+
+      // Pre-scan: pakai kolom parameter yang dikonfigurasi user
       testCasesData.forEach(tc => {
-        const rawCapture = tc["Screen Capture"] || tc["screen_capture"] || tc["ScreenCapture"] || '';
+        const rawCapture = tc[imgParamCol] || tc[imgParamCol.toLowerCase()] || tc[imgParamCol.replace(/ /g,'_')] || '';
         const captureKey = String(rawCapture).toLowerCase().trim();
         if (captureKey && imageMap.has(captureKey)) {
           // Hindari duplikat rId untuk gambar yang sama
@@ -1116,13 +1137,17 @@
         const statusVal = tc["Status"] || tc["status"] || "SUCCESS / FAILED";
         const expectedResult = tc["Expected Result"] || tc["expected_result"] || tc["Hasil Ekspektasi"] || "Sistem merespons sesuai kriteria ekspektasi.";
         const finalResult = tc["Result"] || tc["result"] || "PASSED / FAILED";
-        const screenCapture = tc["Screen Capture"] || tc["screen_capture"] || tc["ScreenCapture"] || '';
-
-        // Resolusi gambar Screen Capture
-        const imgInfo = getImageInfo(screenCapture);
-        const screenCaptureXml = imgInfo
+        // Resolusi gambar: ambil nilai dari kolom parameter yang dikonfigurasi user
+        const paramVal = tc[imgParamCol] || tc[imgParamCol.toLowerCase()] || tc[imgParamCol.replace(/ /g,'_').toLowerCase()] || '';
+        const imgInfo = getImageInfo(paramVal);
+        const imgXmlBlock = imgInfo
           ? `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r>${makeDrawingXml(imgInfo.rId)}</w:r></w:p>`
-          : `<w:p><w:pPr><w:spacing w:before="600" w:after="600"/><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:i/><w:color w:val="999999"/><w:sz w:val="18"/></w:rPr><w:t>${screenCapture ? escapeXml(String(screenCapture)) + ' (gambar tidak ditemukan)' : '[ Tempatkan Screenshot Bukti Uji Di Sini ]'}</w:t></w:r></w:p>`;
+          : `<w:p><w:pPr><w:spacing w:before="600" w:after="600"/><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:i/><w:color w:val="999999"/><w:sz w:val="18"/></w:rPr><w:t>${paramVal ? escapeXml(String(paramVal)) + ' (tidak ditemukan)' : '[ Tempatkan Screenshot Bukti Uji Di Sini ]'}</w:t></w:r></w:p>`;
+
+        // Distribusi gambar ke baris target sesuai konfigurasi
+        const screenCaptureXml   = imgTargetField === 'Screen Capture'   ? imgXmlBlock : `<w:p><w:pPr><w:spacing w:before="600" w:after="600"/><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:i/><w:color w:val="999999"/><w:sz w:val="18"/></w:rPr><w:t>[ Tempatkan Screenshot Bukti Uji Di Sini ]</w:t></w:r></w:p>`;
+        const actualResultInject  = imgTargetField === 'Actual Result'    ? imgXmlBlock : null;
+        const expectedResultInject = imgTargetField === 'Expected Result' ? imgXmlBlock : null;
 
         // Status & Result formatted strikethrough check with Batch Override Logic
         const inRange = rangeType === 'ALL' || (rowNumber >= rangeStart && rowNumber <= rangeEnd);
@@ -1182,7 +1207,7 @@
           <w:tr>
             <w:trPr><w:cantSplit/></w:trPr>
             <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Actual Result</w:t></w:r></w:p></w:tc>
-            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(actualResult)}</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr>${actualResultInject || `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(actualResult)}</w:t></w:r></w:p>`}</w:tc>
           </w:tr>
           
           <w:tr>
@@ -1198,7 +1223,7 @@
           <w:tr>
             <w:trPr><w:cantSplit/></w:trPr>
             <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Expected Result</w:t></w:r></w:p></w:tc>
-            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(expectedResult)}</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr>${expectedResultInject || `<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(expectedResult)}</w:t></w:r></w:p>`}</w:tc>
           </w:tr>
           
           <w:tr>
