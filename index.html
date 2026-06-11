@@ -277,19 +277,53 @@
           <!-- TAB 3: TEST CARD GENERATOR -->
           <div class="tab-panel" id="panelTestCard">
             <div class="grid-container">
-              <!-- Left panel: File Upload Excel -->
+              <!-- Left panel: File Upload (Excel atau DOCX) -->
               <div class="panel-card">
                 <h3>
                   <i data-lucide="download-cloud" style="color: var(--accent);"></i>
-                  <span>Import Test Case Excel</span>
+                  <span>Sumber Data</span>
                 </h3>
-                <div class="file-dropzone" onclick="document.getElementById('fileInputExcelCard').click()">
-                  <i data-lucide="upload"></i>
-                  <span>Upload File Excel Skenario</span>
-                  <p>Unggah berkas .xlsx berisi baris data test case</p>
-                  <input type="file" id="fileInputExcelCard" accept=".xlsx,.xls" style="display:none" onchange="handleExcelCardImport(this.files)" />
+
+                <!-- Mode Switcher -->
+                <div style="display:flex; gap:0; margin-bottom:12px; border:1px solid var(--border); border-radius:4px; overflow:hidden;">
+                  <button id="modeExcelBtn" onclick="switchCardMode('excel')" style="
+                    flex:1; padding:6px 10px; font-size:11px; border:none; cursor:pointer;
+                    background: var(--accent); color: #fff; font-family: var(--font-ui);
+                  ">
+                    <i data-lucide="file-spreadsheet" style="width:12px;height:12px;"></i> Excel → Generate DOCX
+                  </button>
+                  <button id="modeDocxBtn" onclick="switchCardMode('docx')" style="
+                    flex:1; padding:6px 10px; font-size:11px; border:none; cursor:pointer;
+                    background: var(--bg-editor); color: var(--text-muted); font-family: var(--font-ui);
+                  ">
+                    <i data-lucide="file-text" style="width:12px;height:12px;"></i> DOCX → Inject Gambar
+                  </button>
                 </div>
-                <div id="cardExcelNameDisplay" style="font-size:12px; color:var(--green); font-family:var(--font-mono); margin-top:4px;"></div>
+
+                <!-- Mode Excel -->
+                <div id="cardModeExcel">
+                  <div class="file-dropzone" onclick="document.getElementById('fileInputExcelCard').click()">
+                    <i data-lucide="upload"></i>
+                    <span>Upload File Excel Skenario</span>
+                    <p>Unggah berkas .xlsx berisi baris data test case</p>
+                    <input type="file" id="fileInputExcelCard" accept=".xlsx,.xls" style="display:none" onchange="handleExcelCardImport(this.files)" />
+                  </div>
+                  <div id="cardExcelNameDisplay" style="font-size:12px; color:var(--green); font-family:var(--font-mono); margin-top:4px;"></div>
+                </div>
+
+                <!-- Mode DOCX -->
+                <div id="cardModeDocx" style="display:none;">
+                  <div class="file-dropzone" onclick="document.getElementById('fileInputDocxCard').click()">
+                    <i data-lucide="file-text" style="color:var(--blue);"></i>
+                    <span>Upload File DOCX Template</span>
+                    <p>Upload .docx yang sudah ada — gambar akan diinjeksi berdasarkan konfigurasi di panel kanan</p>
+                    <input type="file" id="fileInputDocxCard" accept=".docx" style="display:none" onchange="handleDocxCardImport(this.files)" />
+                  </div>
+                  <div id="cardDocxNameDisplay" style="font-size:12px; color:var(--blue); font-family:var(--font-mono); margin-top:4px;"></div>
+                  <div style="margin-top:10px; padding:8px; background:rgba(86,156,214,0.08); border:1px solid rgba(86,156,214,0.3); border-radius:4px; font-size:11px; color:var(--text-muted); line-height:1.6;">
+                    <strong style="color:var(--blue);">Cara kerja:</strong> Upload DOCX → pilih folder gambar di panel kanan → atur parameter &amp; target → Execute. Sistem akan scan tiap tabel di DOCX, cocokkan nilai baris <em>parameter</em> dengan nama file gambar, lalu sisipkan gambar ke baris <em>target</em>.
+                  </div>
+                </div>
               </div>
 
               <!-- Right panel: Tester & Layout Config -->

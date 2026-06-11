@@ -606,7 +606,11 @@
       } else if (currentTab === 'replacer') {
         processReplacements();
       } else if (currentTab === 'testcard') {
-        processExcelToTestCards();
+        if (cardMode === 'docx') {
+          processDocxCardInject();
+        } else {
+          processExcelToTestCards();
+        }
       }
     }
 
@@ -1063,6 +1067,71 @@
 
     // Map global penyimpanan gambar: key = nama file tanpa ekstensi (lowercase), value = { file, ext }
     let screenCaptureMap = new Map();
+
+    // Mode aktif Tab 3: 'excel' = generate dari Excel, 'docx' = inject ke DOCX yang sudah ada
+    let cardMode = 'excel';
+    let importedDocxCardFile = null;
+
+    /** Switcher mode Tab 3: Excel vs DOCX Template */
+    function switchCardMode(mode) {
+      cardMode = mode;
+      document.getElementById('cardModeExcel').style.display = mode === 'excel' ? 'block' : 'none';
+      document.getElementById('cardModeDocx').style.display  = mode === 'docx'  ? 'block' : 'none';
+      document.getElementById('modeExcelBtn').style.background = mode === 'excel' ? 'var(--accent)' : 'var(--bg-editor)';
+      document.getElementById('modeExcelBtn').style.color = mode === 'excel' ? '#fff' : 'var(--text-muted)';
+      document.getElementById('modeDocxBtn').style.background  = mode === 'docx'  ? 'var(--blue)'   : 'var(--bg-editor)';
+      document.getElementById('modeDocxBtn').style.color  = mode === 'docx'  ? '#fff' : 'var(--text-muted)';
+      lucide.createIcons();
+    }
+
+    /** Handler: upload file DOCX template untuk mode inject */
+    function handleDocxCardImport(files) {
+      if (!files || files.length === 0) return;
+      importedDocxCardFile = files[0];
+      const display = document.getElementById('cardDocxNameDisplay');
+      if (display) display.textContent = `✓ ${importedDocxCardFile.name}`;
+      writeLog(`[DOCX Mode] Template dimuat: ${importedDocxCardFile.name}`);
+    }
+
+    /** Eksekusi inject gambar ke DOCX template yang sudah ada */
+    async function processDocxCardInject() {
+      if (!importedDocxCardFile) {
+        logToConsole('ERROR', 'Belum ada file DOCX template yang diunggah.');
+        showToast('Upload file DOCX template terlebih dahulu!', 'error');
+        return;
+      }
+      if (screenCaptureMap.size === 0) {
+        logToConsole('ERROR', 'Belum ada folder gambar dipilih.');
+        showToast('Pilih folder gambar di panel kanan terlebih dahulu!', 'error');
+        return;
+      }
+
+      logToConsole('INFO', `Memulai inject gambar ke: ${importedDocxCardFile.name}...`);
+      const activeCols = cols.filter(c => c.checked);
+
+      try {
+        const result = await processDocxFile(importedDocxCardFile, activeCols);
+        const downloadArea = document.getElementById('downloadArea');
+        downloadArea.innerHTML = '';
+        downloadArea.classList.add('visible');
+
+        const baseName = importedDocxCardFile.name.replace(/\.docx$/i, '');
+        const downloadBtn = document.createElement('a');
+        downloadBtn.href = URL.createObjectURL(result.blob);
+        downloadBtn.download = `${baseName}_injected.docx`;
+        downloadBtn.className = 'tb-btn primary';
+        downloadBtn.innerHTML = `<i data-lucide="download"></i> Download ${baseName}_injected.docx`;
+        downloadArea.appendChild(downloadBtn);
+        lucide.createIcons();
+
+        logToConsole('SUCCESS', `Selesai! ${result.filledCount} gambar berhasil disisipkan ke DOCX.`);
+        showToast(`${result.filledCount} gambar berhasil diinjeksi!`, 'success');
+      } catch (err) {
+        console.error(err);
+        logToConsole('ERROR', `Gagal memproses DOCX: ${err.message}`);
+        showToast('Gagal! Cek console untuk detail.', 'error');
+      }
+    }
 
     /**
      * Handler: Membaca file-file gambar yang dipilih oleh user dan menyimpannya ke screenCaptureMap.
