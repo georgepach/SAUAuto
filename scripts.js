@@ -750,6 +750,195 @@
         }
       }
 
+      // ══════════════════════════════════════════════
+      // 3. IMAGE INJECT — Sisipkan gambar ke tabel DOCX
+      // ══════════════════════════════════════════════
+      if (screenCaptureMap.size > 0) {
+        // Baca konfigurasi dari UI
+        const imgParamColSelect = document.getElementById('imgParamColumn');
+        const imgParamColCustom = document.getElementById('imgParamColumnCustom');
+        let imgParamCol = imgParamColSelect ? imgParamColSelect.value : 'Screen Capture';
+        if (imgParamCol === '__custom__') {
+          imgParamCol = imgParamColCustom ? imgParamColCustom.value.trim() : 'Screen Capture';
+        }
+        const imgTargetFieldSelect = document.getElementById('imgTargetField');
+        const imgTargetField = imgTargetFieldSelect ? imgTargetFieldSelect.value : 'Screen Capture';
+
+        // === Kumpulkan gambar yang dipakai ===
+        const imgRegistry = []; // { baseName, rId, filename, buf }
+        let imgIdx = 0;
+
+        // Pass 1: scan tiap tabel dan kumpulkan gambar yang perlu disisipkan
+        const tablesForImg = xmlDoc.getElementsByTagNameNS(WNS, 'tbl');
+        const tableImagePlan = []; // Per-table: { tableEl, paramVal, targetRowEls }
+
+        for (let ti = 0; ti < tablesForImg.length; ti++) {
+          const tbl = tablesForImg[ti];
+          const rows = tbl.getElementsByTagNameNS(WNS, 'tr');
+          let paramVal = null;
+          let targetCells = [];
+
+          for (let ri = 0; ri < rows.length; ri++) {
+            const cells = rows[ri].getElementsByTagNameNS(WNS, 'tc');
+            if (cells.length < 2) continue;
+            const label = getCellText(cells[0]).trim().toLowerCase();
+            
+            // Cari baris parameter (sumber nama file gambar)
+            if (label === imgParamCol.toLowerCase()) {
+              paramVal = getCellText(cells[1]).trim();
+            }
+            
+            // Kumpulkan sel target (baris yang akan diisi gambar)
+            if (label === imgTargetField.toLowerCase()) {
+              for (let ci = 1; ci < cells.length; ci++) {
+                targetCells.push(cells[ci]);
+              }
+            }
+          }
+
+          if (paramVal) {
+            tableImagePlan.push({ tbl, paramVal, targetCells });
+
+            // Daftarkan gambar jika belum ada di registry
+            const key = paramVal.toLowerCase().trim();
+            if (screenCaptureMap.has(key)) {
+              const already = imgRegistry.find(r => r.baseName === key);
+              if (!already) {
+                imgIdx++;
+                const { file, ext } = screenCaptureMap.get(key);
+                const rId = `rIdAutoImg${imgIdx}`;
+                const filename = `autoimg${imgIdx}.${ext}`;
+                const buf = await file.arrayBuffer();
+                imgRegistry.push({ baseName: key, rId, filename, ext, buf });
+              }
+            }
+          }
+        }
+
+        if (imgRegistry.length > 0) {
+          // Tambahkan file gambar ke ZIP
+          for (const img of imgRegistry) {
+            zip.file(`word/media/${img.filename}`, img.buf);
+          }
+
+          // Update [Content_Types].xml — tambahkan tipe MIME gambar yang belum ada
+          const ctXmlStr = await zip.file('[Content_Types].xml').async('string');
+          let ctXml = ctXmlStr;
+          for (const img of imgRegistry) {
+            const mime = img.ext === 'jpg' || img.ext === 'jpeg' ? 'jpeg' : img.ext;
+            if (!ctXml.includes(`Extension="${img.ext}"`)) {
+              ctXml = ctXml.replace('</Types>', `  <Default Extension="${img.ext}" ContentType="image/${mime}"/>\n</Types>`);
+            }
+          }
+          zip.file('[Content_Types].xml', ctXml);
+
+          // Update word/_rels/document.xml.rels — tambahkan relasi gambar
+          let relsXmlStr = '';
+          const relsFile = zip.file('word/_rels/document.xml.rels');
+          if (relsFile) {
+            relsXmlStr = await relsFile.async('string');
+          } else {
+            relsXmlStr = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n</Relationships>`;
+          }
+          for (const img of imgRegistry) {
+            if (!relsXmlStr.includes(img.rId)) {
+              relsXmlStr = relsXmlStr.replace('</Relationships>',
+                `  <Relationship Id="${img.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${img.filename}"/>\n</Relationships>`
+              );
+            }
+          }
+          zip.file('word/_rels/document.xml.rels', relsXmlStr);
+
+          // Helper: buat XML DrawingML inline untuk DOCX yang sudah ada
+          const makeInlineDrawing = (rId) => {
+            const cx = 4500000; // ~5cm
+            const cy = 3375000; // ~3.75cm
+            const uid = Math.floor(Math.random() * 90000) + 10000;
+            return `<w:drawing xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+              <wp:inline><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>
+              <wp:docPr id="${uid}" name="img${uid}"/>
+              <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:pic><pic:nvPicPr><pic:cNvPr id="${uid}" name="img${uid}"/><pic:cNvPicPr/></pic:nvPicPr>
+                <pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
+                <pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>
+                <a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>
+              </a:graphicData></a:graphic></wp:inline>
+            </w:drawing>`;
+          };
+
+          // Pass 2: injeksi gambar ke sel target di setiap tabel
+          for (const plan of tableImagePlan) {
+            const key = plan.paramVal.toLowerCase().trim();
+            const imgData = imgRegistry.find(r => r.baseName === key);
+            if (!imgData) continue;
+
+            for (const targetCell of plan.targetCells) {
+              // Bersihkan isi sel lama
+              const paras = targetCell.getElementsByTagNameNS(WNS, 'p');
+              for (let p of Array.from(paras)) {
+                const runs = Array.from(p.getElementsByTagNameNS(WNS, 'r'));
+                runs.forEach(r => r.parentNode.removeChild(r));
+              }
+
+              // Buat paragraf baru dengan DrawingML
+              const para = paras[0] || (() => {
+                const np = xmlDoc.createElementNS(WNS, 'w:p');
+                targetCell.appendChild(np);
+                return np;
+              })();
+
+              // Set paragraph alignment center
+              let pPr = para.getElementsByTagNameNS(WNS, 'pPr')[0];
+              if (!pPr) {
+                pPr = xmlDoc.createElementNS(WNS, 'w:pPr');
+                para.insertBefore(pPr, para.firstChild);
+              }
+              const jc = xmlDoc.createElementNS(WNS, 'w:jc');
+              jc.setAttribute('w:val', 'center');
+              pPr.appendChild(jc);
+
+              // Inject DrawingML as raw XML via temporary wrapper (serialize trick)
+              const run = xmlDoc.createElementNS(WNS, 'w:r');
+              para.appendChild(run);
+
+              // Serialize, inject raw drawing XML string, then re-parse
+              const serializer2 = new XMLSerializer();
+              let tempXml = serializer2.serializeToString(xmlDoc);
+              const drawingXml = makeInlineDrawing(imgData.rId);
+              // Replace placeholder run with drawing XML
+              const runId = `__IMGRUN_${imgData.rId}_${plan.paramVal}__`;
+              run.setAttribute('w:id', runId);
+              let serialized = serializer2.serializeToString(xmlDoc);
+              serialized = serialized.replace(
+                new RegExp(`<w:r[^>]*w:id="${runId.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}"[^/]*/>`,'g'),
+                `<w:r>${drawingXml}</w:r>`
+              );
+              // Re-parse only if needed, else update inline
+              // (We'll do it via string replacement on the final serialize step)
+              run.setAttribute('data-imgdrawing', imgData.rId);
+              filledCount++;
+            }
+          }
+
+          // Serialize ulang lalu patch drawing XML lewat string replacement
+          const serializer3 = new XMLSerializer();
+          let finalXml = serializer3.serializeToString(xmlDoc);
+
+          // Ganti tiap <w:r data-imgdrawing="rIdXxx"/> dengan <w:r><w:drawing>...</w:drawing></w:r>
+          finalXml = finalXml.replace(/<w:r [^>]*data-imgdrawing="([^"]+)"[^/]*\/>/g, (match, rId) => {
+            return `<w:r>${makeInlineDrawing(rId)}</w:r>`;
+          });
+
+          zip.file('word/document.xml', finalXml);
+
+          const blob = await zip.generateAsync({
+            type: 'blob',
+            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          });
+          return { blob, filledCount };
+        }
+      }
+
       const serializer = new XMLSerializer();
       const newXml = serializer.serializeToString(xmlDoc);
       zip.file('word/document.xml', newXml);
