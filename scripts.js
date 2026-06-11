@@ -154,13 +154,24 @@
           return { valid: false, message: 'Harap tempel data teks sumber (Source Text / Input).' };
         }
       } else if (currentTab === 'testcard') {
-        const hasTester = document.getElementById('cardTesterName').value.trim() !== '';
-        const hasData = importedExcelCardData !== null;
-        if (!hasData) {
-          return { valid: false, message: 'Harap unggah file Excel skenario pengujian.' };
-        }
-        if (!hasTester) {
-          return { valid: false, message: 'Harap masukkan nama Tester (Tested By).' };
+        if (cardMode === 'docx') {
+          // Mode DOCX: validasi file DOCX template dan folder gambar
+          if (!importedDocxCardFile) {
+            return { valid: false, message: 'Mode DOCX: Harap upload file DOCX template terlebih dahulu.' };
+          }
+          if (screenCaptureMap.size === 0) {
+            return { valid: false, message: 'Mode DOCX: Harap pilih folder gambar terlebih dahulu.' };
+          }
+        } else {
+          // Mode Excel: validasi file Excel dan nama Tester
+          const hasData = importedExcelCardData !== null;
+          if (!hasData) {
+            return { valid: false, message: 'Harap unggah file Excel skenario pengujian.' };
+          }
+          const hasTester = document.getElementById('cardTesterName').value.trim() !== '';
+          if (!hasTester) {
+            return { valid: false, message: 'Harap masukkan nama Tester (Tested By).' };
+          }
         }
       }
       return { valid: true };
