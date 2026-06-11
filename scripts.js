@@ -5,6 +5,11 @@
     let selectedAutoFillFiles = [];
     let importedExcelCardData = null;
 
+    // Tab 3: mode operasi dan state file DOCX
+    let cardMode = 'excel';            // 'excel' | 'docx'
+    let importedDocxCardFile = null;   // File object DOCX template
+    let screenCaptureMap = new Map();  // Map: basename → { file, ext }
+
     const WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
     let cols = [
@@ -1075,13 +1080,7 @@
     /* ══════════════════════════════════════════════
        WORD TEST CARD GENERATION ENGINE (JSZIP)
      ═══════════════════════════════════════════════ */
-
-    // Map global penyimpanan gambar: key = nama file tanpa ekstensi (lowercase), value = { file, ext }
-    let screenCaptureMap = new Map();
-
-    // Mode aktif Tab 3: 'excel' = generate dari Excel, 'docx' = inject ke DOCX yang sudah ada
-    let cardMode = 'excel';
-    let importedDocxCardFile = null;
+    // screenCaptureMap, cardMode, importedDocxCardFile → dideklarasikan di GLOBAL STATE atas
 
     /** Switcher mode Tab 3: Excel vs DOCX Template */
     function switchCardMode(mode) {
