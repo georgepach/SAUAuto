@@ -916,3 +916,8 @@
       background: #252526;
     }
 
+    /* Console Log Helper Classes */
+    .text-green { color: #4ec9b0; }
+    .text-red { color: #f44336; }
+    .text-orange { color: #ce9178; }
+

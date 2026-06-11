@@ -173,6 +173,32 @@
                   <span>Configuration Values</span>
                 </h3>
                 <div id="dynamicConfigInputs"></div>
+
+                <hr style="border:0; border-top:1px solid var(--border); margin:14px 0;" />
+                
+                <h3 style="margin-bottom:8px; border-bottom:none; padding-bottom:0;">
+                  <i data-lucide="sliders" style="color: var(--accent);"></i>
+                  <span>Fitur Coret SUCCESS / FAILED</span>
+                </h3>
+                
+                <label>Aksi Pencoretan:</label>
+                <select id="cardStatusOverride" class="settings-select" style="width:100%; margin-bottom:8px;">
+                  <option value="AUTO">Lewati / Biarkan (Tanpa Coret Manual)</option>
+                  <option value="STRIKE_SUCCESS">Coret tulisan "SUCCESS"</option>
+                  <option value="STRIKE_FAILED">Coret tulisan "FAILED"</option>
+                </select>
+
+                <label>Terapkan Pada Baris (Test Case):</label>
+                <select id="cardRangeType" class="settings-select" style="width:100%; margin-bottom:8px;" onchange="toggleRangeInputs()">
+                  <option value="ALL">Semua Baris</option>
+                  <option value="CUSTOM">Rentang Tertentu...</option>
+                </select>
+
+                <div id="cardRangeInputs" style="display:none; gap:8px; align-items:center;">
+                  <input type="number" id="cardRangeStart" placeholder="Mulai baris ke-" min="1" style="flex:1;" />
+                  <span style="color:var(--text-muted); font-size:11px;">s/d</span>
+                  <input type="number" id="cardRangeEnd" placeholder="Sampai baris ke-" min="1" style="flex:1;" />
+                </div>
               </div>
             </div>
 

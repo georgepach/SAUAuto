@@ -136,23 +136,7 @@
           return { valid: false, message: 'Harap pilih/upload berkas pengujian terlebih dahulu.' };
         }
         
-        const activeCols = cols.filter(c => c.checked);
-        if (activeCols.length === 0) {
-          return { valid: false, message: 'Harap pilih minimal satu target kolom untuk diisi.' };
-        }
-
-        // Pastikan setiap kolom target yang aktif memiliki nilai konfigurasi yang terisi
-        const missingValues = [];
-        activeCols.forEach(col => {
-          const val = configValues[col.key] || '';
-          if (val.trim() === '') {
-            missingValues.push(col.label);
-          }
-        });
-
-        if (missingValues.length > 0) {
-          return { valid: false, message: `Harap isi nilai konfigurasi untuk target kolom: ${missingValues.join(', ')}` };
-        }
+        // Validasi kolom target ditiadakan agar pengguna bisa mengeksekusi override status walau tanpa memilih kolom.
       } else if (currentTab === 'replacer') {
         const hasText = document.getElementById('replacerSourceText').value.trim() !== '';
         if (!hasText) {
@@ -611,7 +595,7 @@
       } else if (currentTab === 'replacer') {
         processReplacements();
       } else if (currentTab === 'testcard') {
-        processTestCardWordGeneration();
+        processExcelToTestCards();
       }
     }
 
@@ -701,23 +685,56 @@
       const xmlDoc = parser.parseFromString(docXmlStr, 'application/xml');
       let filledCount = 0;
 
-      const allRows = xmlDoc.getElementsByTagNameNS(WNS, 'tr');
-      for (let ri = 0; ri < allRows.length; ri++) {
-        const row = allRows[ri];
-        const cells = row.getElementsByTagNameNS(WNS, 'tc');
-        if (cells.length < 2) continue;
+      // Persiapan baca parameter UI Batch Status Override dari panel Auto Fill
+      const overrideSelect = document.getElementById('cardStatusOverride');
+      const overrideStatus = overrideSelect ? overrideSelect.value : 'AUTO';
+      const rangeType = document.getElementById('cardRangeType') ? document.getElementById('cardRangeType').value : 'ALL';
+      const startInput = document.getElementById('cardRangeStart');
+      const endInput = document.getElementById('cardRangeEnd');
+      const rangeStart = startInput && startInput.value ? parseInt(startInput.value) : 1;
+      const rangeEnd = endInput && endInput.value ? parseInt(endInput.value) : 999999;
+      
+      let testCaseCounter = 0;
 
-        const labelText = getCellText(cells[0]).toLowerCase();
-        const match = activeCols.find(c => labelText.includes(c.key));
-        if (!match) continue;
+      const allTables = xmlDoc.getElementsByTagNameNS(WNS, 'tbl');
+      for (let ti = 0; ti < allTables.length; ti++) {
+        testCaseCounter++; // Setiap 1 tabel dianggap 1 Test Case
+        const inRange = rangeType === 'ALL' || (testCaseCounter >= rangeStart && testCaseCounter <= rangeEnd);
+        
+        const allRows = allTables[ti].getElementsByTagNameNS(WNS, 'tr');
+        for (let ri = 0; ri < allRows.length; ri++) {
+          const row = allRows[ri];
+          const cells = row.getElementsByTagNameNS(WNS, 'tc');
+          
+          // 1. Eksekusi Batch Status Override untuk sel yang mengandung teks success/failed
+          for (let ci = 0; ci < cells.length; ci++) {
+            const cellText = getCellText(cells[ci]).trim().replace(/\s+/g, ' '); // Normalisasi spasi
+            
+            if (cellText === 'SUCCESS / FAILED' || cellText === 'PASSED / FAILED') {
+              if (inRange && overrideStatus !== 'AUTO') {
+                // Jika STRIKE_FAILED, berarti yg sukses (isSuccess = true) -> FAILED dicoret.
+                const isSuccess = overrideStatus === 'STRIKE_FAILED';
+                setCellStrikethrough(cells[ci], cellText, isSuccess, xmlDoc);
+                filledCount++; // Anggap ini sebuah "pengisian" agar dihitung
+              }
+            }
+          }
 
-        const fillVal = configValues[match.key] || '';
+          // 2. Eksekusi standar Auto Fill (mencari label & mengisi sel kosong)
+          if (cells.length < 2) continue;
 
-        for (let ci = 1; ci < cells.length; ci++) {
-          const cellText = getCellText(cells[ci]);
-          if (!cellText) {
-            setCellText(cells[ci], fillVal, xmlDoc);
-            filledCount++;
+          const labelText = getCellText(cells[0]).toLowerCase();
+          const match = activeCols.find(c => labelText.includes(c.key));
+          if (!match) continue;
+
+          const fillVal = configValues[match.key] || '';
+
+          for (let ci = 1; ci < cells.length; ci++) {
+            const cellText = getCellText(cells[ci]);
+            if (!cellText) {
+              setCellText(cells[ci], fillVal, xmlDoc);
+              filledCount++;
+            }
           }
         }
       }
@@ -760,6 +777,67 @@
       para.appendChild(run);
     }
 
+    function setCellStrikethrough(cell, originalText, isSuccess, xmlDoc) {
+      const paras = cell.getElementsByTagNameNS(WNS, 'p');
+      for (let p of paras) {
+        const runs = Array.from(p.getElementsByTagNameNS(WNS, 'r'));
+        runs.forEach(r => r.parentNode.removeChild(r));
+      }
+
+      let para = paras[0];
+      if (!para) {
+        para = xmlDoc.createElementNS(WNS, 'w:p');
+        cell.appendChild(para);
+      }
+      
+      const parts = originalText.split('/');
+      const opt1 = parts[0].trim();
+      const opt2 = parts[1].trim();
+
+      const strike1 = isSuccess ? false : true;
+      const strike2 = isSuccess ? true : false;
+      const color1 = '000000'; // Tetap hitam sesuai permintaan pengguna
+      const color2 = '000000'; // Tetap hitam sesuai permintaan pengguna
+
+      const createRun = (text, strike, color) => {
+        const r = xmlDoc.createElementNS(WNS, 'w:r');
+        const rPr = xmlDoc.createElementNS(WNS, 'w:rPr');
+        
+        // Memaksa penggunaan font Calibri
+        const rFonts = xmlDoc.createElementNS(WNS, 'w:rFonts');
+        rFonts.setAttribute('w:ascii', 'Calibri');
+        rFonts.setAttribute('w:hAnsi', 'Calibri');
+        rFonts.setAttribute('w:cs', 'Calibri');
+        rPr.appendChild(rFonts);
+        
+        if (strike) {
+          const strikeNode = xmlDoc.createElementNS(WNS, 'w:strike');
+          strikeNode.setAttribute('w:val', '1');
+          rPr.appendChild(strikeNode);
+        }
+        const colorNode = xmlDoc.createElementNS(WNS, 'w:color');
+        colorNode.setAttribute('w:val', color);
+        rPr.appendChild(colorNode);
+        
+        const szNode = xmlDoc.createElementNS(WNS, 'w:sz');
+        szNode.setAttribute('w:val', '24'); // Ubah dari 20 (10pt) menjadi 24 (12pt)
+        rPr.appendChild(szNode);
+        
+        r.appendChild(rPr);
+        
+        const t = xmlDoc.createElementNS(WNS, 'w:t');
+        t.setAttribute('xml:space', 'preserve');
+        t.textContent = text;
+        r.appendChild(t);
+        
+        return r;
+      };
+
+      para.appendChild(createRun(opt1, strike1, color1));
+      para.appendChild(createRun(' / ', false, '000000'));
+      para.appendChild(createRun(opt2, strike2, color2));
+    }
+
     function createDownloadButton(blob, filename) {
       const container = document.getElementById('downloadArea');
       const btn = document.createElement('button');
@@ -782,242 +860,327 @@
     /* ══════════════════════════════════════════════
        WORD TEST CARD GENERATION ENGINE (JSZIP)
      ═══════════════════════════════════════════════ */
-    async function processTestCardWordGeneration() {
-      if (!importedExcelCardData || importedExcelCardData.length === 0) {
-        writeLog('Error: Data Excel kosong atau belum di-upload.', 'error');
+    /**
+     * 1. FUNGSI UTAMA: Memproses File Excel dan Mengonversinya ke Word (.docx)
+     * Fungsi ini dipanggil saat tombol ekskusi (misal: triggerExecution) ditekan.
+     * Membaca data dari SheetJS dan mengopernya ke generator XML Word.
+     */
+    async function processExcelToTestCards() {
+      const fileInput = document.getElementById('fileInputExcelCard');
+      const testerInput = document.getElementById('cardTesterName');
+      const approvedInput = document.getElementById('cardApprovedBy');
+      const consoleBody = document.getElementById('consoleBody');
+      const downloadArea = document.getElementById('downloadArea');
+
+      // Validasi input file
+      if (!fileInput || fileInput.files.length === 0) {
+        logToConsole("ERROR", "Silakan unggah file Excel skenario terlebih dahulu.");
+        alert("File Excel belum diunggah!");
         return;
       }
 
-      const tester = document.getElementById('cardTesterName').value.trim();
-      const approved = document.getElementById('cardApprovedBy').value.trim() || 'TIM IT';
+      const file = fileInput.files[0];
+      const testerName = testerInput ? testerInput.value.trim() : "Rieliams Vamkam";
+      const approvedBy = approvedInput ? approvedInput.value.trim() : "TIM IT";
 
-      writeLog(`Generating Word Document with ${importedExcelCardData.length} Test Cards...`);
+      logToConsole("INFO", `Memulai konversi berkas: ${file.name}...`);
 
-      try {
-        const zip = new JSZip();
-
-        // 1. [Content_Types].xml
-        zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-</Types>`);
-
-        // 2. _rels/.rels
-        zip.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`);
-
-        // 3. word/_rels/document.xml.rels
-        zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`);
-
-        // 4. word/styles.xml
-        zip.file("word/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:docDefaults>
-    <w:rPrDefault>
-      <w:rPr>
-        <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
-        <w:sz w:val="22"/>
-      </w:rPr>
-    </w:rPrDefault>
-  </w:docDefaults>
-</w:styles>`);
-
-        // Build document body with tables
-        let documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>`;
-
-        importedExcelCardData.forEach((row, index) => {
-          // Normalize row values
-          const tcNo = escapeXml(row['NO'] || row['No Test Case'] || row['ID'] || `TC-${index+1}`);
-          const func = escapeXml(row['Function'] || row['Fungsi'] || '-');
-          const scen = escapeXml(row['Scenario'] || row['Skenario'] || '-');
-          const act = escapeXml(row['Actual Result'] || row['Hasil Aktual'] || 'Sesuai');
-          const stat = escapeXml(row['Status'] || 'Success');
-          const exp = escapeXml(row['Expected Result'] || row['Hasil Ekspektasi'] || '-');
-
-          // Status & Result formatted strikethrough check
-          const isSuccess = stat.toLowerCase().includes('success') || stat.toLowerCase().includes('pass');
-
-          // Generate tables
-          documentXml += `
-    <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>TEST CARD CASE - EVIDENCE</w:t></w:r></w:p>
-    <w:p><w:pPr><w:spacing w:after="120"/></w:pPr></w:p>
-    <w:tbl>
-      <w:tblPr>
-        <w:tblW w:w="5000" w:type="pct"/>
-        <w:tblBorders>
-          <w:top w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
-          <w:left w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
-          <w:bottom w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
-          <w:right w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
-          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="DDDDDD"/>
-          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="DDDDDD"/>
-        </w:tblBorders>
-      </w:tblPr>
-      <w:tblGrid>
-        <w:gridCol w:w="2500"/>
-        <w:gridCol w:w="5500"/>
-      </w:tblGrid>
+      const reader = new FileReader();
       
-      <!-- Row 1: No Test Case -->
-      ${createWordTableRow("No Test Case", tcNo)}
+      reader.onload = async function (e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          // Ambil sheet pertama dari file Excel
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          // Konversi data sheet menjadi objek JSON array
+          const sheetData = XLSX.utils.sheet_to_json(worksheet);
 
-      <!-- Row 2: Function -->
-      ${createWordTableRow("Function", func)}
+          if (sheetData.length === 0) {
+            logToConsole("WARNING", "File Excel kosong atau tidak memiliki baris data yang valid.");
+            return;
+          }
 
-      <!-- Row 3: Scenario -->
-      ${createWordTableRow("Scenario", scen)}
+          logToConsole("INFO", `Berhasil mengekstrak ${sheetData.length} baris data test case.`);
 
-      <!-- Row 4: Actual Result -->
-      ${createWordTableRow("Actual Result", act)}
+          // Panggil fungsi generator Word menggunakan JSZip
+          logToConsole("INFO", "Sedang menyusun komponen struktur tabel OpenXML Word...");
+          const docxBlob = await generateTestCardDocument(sheetData, testerName, approvedBy);
 
-      <!-- Row 5: Status -->
-      ${createWordTableRowWithStrikethrough("Status", "SUCCESS", "FAILED", isSuccess)}
+          // Sediakan tombol unduh secara dinamis di area download strip UI
+          if (downloadArea) {
+            downloadArea.innerHTML = ""; // Bersihkan tombol lama
+            downloadArea.classList.add('visible'); // pastikan strip unduhan terlihat
+            
+            const downloadBtn = document.createElement("a");
+            downloadBtn.href = URL.createObjectURL(docxBlob);
+            downloadBtn.download = `SIT_Report_${file.name.split('.')[0]}.docx`;
+            downloadBtn.className = "tb-btn primary";
+            downloadBtn.innerHTML = `<i data-lucide="download"></i> Download SIT Report DOCX`;
+            
+            downloadArea.appendChild(downloadBtn);
+            // Re-render icon lucide jika diperlukan
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+          }
 
-      <!-- Row 6: Expected Result -->
-      ${createWordTableRow("Expected Result", exp)}
+          logToConsole("SUCCESS", "Proses konversi selesai! Silakan klik tombol download di bawah.");
+          showToast("Konversi Berhasil! File Word siap diunduh.", "success");
 
-      <!-- Row 7: Screen Capture (empty large cell) -->
-      <w:tr>
-        <w:trPr><w:cantSplit/></w:trPr>
-        <w:tc>
-          <w:tcPr>
-            <w:shd w:fill="F2F2F2"/>
-            <w:vAlign w:val="center"/>
-          </w:tcPr>
-          <w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Screen Capture</w:t></w:r></w:p>
-        </w:tc>
-        <w:tc>
-          <w:tcPr><w:vAlign w:val="center"/></w:tcPr>
-          <w:p>
-            <w:pPr><w:spacing w:before="600" w:after="600"/></w:pPr>
-            <w:r><w:rPr><w:color w:val="999999"/><w:sz w:val="18"/></w:rPr><w:t> ( Paste image evidence here ) </w:t></w:r>
-          </w:p>
-        </w:tc>
-      </w:tr>
+        } catch (error) {
+          console.error(error);
+          logToConsole("ERROR", `Terjadi kegagalan sistem: ${error.message}`);
+        }
+      };
 
-      <!-- Row 8: Result -->
-      ${createWordTableRowWithStrikethrough("Result", "PASSED", "FAILED", isSuccess)}
-
-      <!-- Row 9: Tested By -->
-      ${createWordTableRow("Tested By", escapeXml(tester))}
-
-      <!-- Row 10: Approved By -->
-      ${createWordTableRow("Approved By", escapeXml(approved))}
-
-    </w:tbl>
-    
-    <!-- Page Break for all except the last item -->
-    ${index < importedExcelCardData.length - 1 ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : ''}
-    `;
-        });
-
-        documentXml += `
-    <w:sectPr>
-      <w:pgSz w:w="11906" w:h="16838"/>
-      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>
-    </w:sectPr>
-  </w:body>
-</w:document>`;
-
-        zip.file("word/document.xml", documentXml);
-
-        const blob = await zip.generateAsync({ type: 'blob' });
-        const downloadName = 'Test_Cards_Evidence.docx';
-        createDownloadButton(blob, downloadName);
-
-        // Auto trigger download
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = downloadName;
-        a.click();
-        URL.revokeObjectURL(url);
-
-        writeLog(`Successfully generated and downloaded "${downloadName}" with ${importedExcelCardData.length} cards.`, 'success');
-        showToast(`Test Card .docx berhasil digenerate (${importedExcelCardData.length} kartu)!`, 'success');
-      } catch (err) {
-        writeLog(`Failed to generate Word document: ${err.message}`, 'error');
-        showToast('Gagal menghasilkan dokumen Test Card.', 'error');
-        console.error(err);
-      }
+      reader.readAsArrayBuffer(file);
     }
 
-    function createWordTableRow(label, value) {
-      return `
-      <w:tr>
-        <w:trPr><w:cantSplit/></w:trPr>
-        <w:tc>
-          <w:tcPr>
-            <w:shd w:fill="F2F2F2"/>
-            <w:vAlign w:val="center"/>
-          </w:tcPr>
-          <w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>${label}</w:t></w:r></w:p>
-        </w:tc>
-        <w:tc>
-          <w:tcPr><w:vAlign w:val="center"/></w:tcPr>
-          <w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${value}</w:t></w:r></w:p>
-        </w:tc>
-      </w:tr>`;
+
+    /**
+     * 2. CORE CORE ENGINE: Generator Dokumen DOCX via XML OPC Menggunakan JSZip
+     * Membentuk tabel berpasangan (Key-Value) dan layouting sel sesuai rujukan MySAU Mobile.
+     */
+    async function generateTestCardDocument(testCasesData, testerName, approverName) {
+      const zip = new JSZip();
+
+      // A. Definisikan susunan konten relasi tipe konten media ([Content_Types].xml)
+      zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+      <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+      <Default Extension="xml" ContentType="application/xml"/>
+      <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+    </Types>`);
+
+      // B. Definisikan global relationships folder (_rels/.rels)
+      zip.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+      <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+    </Relationships>`);
+
+      // Ambil nilai UI untuk fitur Batch Override
+      const overrideSelect = document.getElementById('cardStatusOverride');
+      const overrideStatus = overrideSelect ? overrideSelect.value : 'AUTO';
+      
+      const rangeTypeSelect = document.getElementById('cardRangeType');
+      const rangeType = rangeTypeSelect ? rangeTypeSelect.value : 'ALL';
+      
+      const startInput = document.getElementById('cardRangeStart');
+      const endInput = document.getElementById('cardRangeEnd');
+      const rangeStart = startInput && startInput.value ? parseInt(startInput.value) : 1;
+      const rangeEnd = endInput && endInput.value ? parseInt(endInput.value) : 999999;
+
+      // C. Bangun isi struktur tabel XML dinamis dengan looping array data
+      let tableBlocksXml = "";
+
+      testCasesData.forEach((tc, index) => {
+        const rowNumber = index + 1; // Baris keberapa (1-based)
+        
+        // Normalisasi pencarian nama properti kolom dari Excel (Case-Insensitive & Fallback Value)
+        const noTestCase = tc["No Test Case"] || tc["no_test_case"] || tc["NO"] || tc["ID"] || `TCM${String(rowNumber).padStart(3, '0')}`;
+        const functionName = tc["Function"] || tc["function"] || tc["Fungsi"] || "General Function";
+        const scenarioBody = tc["Scenario"] || tc["scenario"] || tc["Skenario"] || "User melakukan aktivitas pengujian pada sistem.";
+        const actualResult = tc["Actual Result"] || tc["actual_result"] || tc["Hasil Aktual"] || "SUCCESS / FAILED";
+        const statusVal = tc["Status"] || tc["status"] || "SUCCESS / FAILED";
+        const expectedResult = tc["Expected Result"] || tc["expected_result"] || tc["Hasil Ekspektasi"] || "Sistem merespons sesuai kriteria ekspektasi.";
+        const finalResult = tc["Result"] || tc["result"] || "PASSED / FAILED";
+
+        // Status & Result formatted strikethrough check with Batch Override Logic
+        const inRange = rangeType === 'ALL' || (rowNumber >= rangeStart && rowNumber <= rangeEnd);
+
+        let isSuccess;
+        if (inRange && overrideStatus === 'STRIKE_FAILED') {
+          isSuccess = true;
+        } else if (inRange && overrideStatus === 'STRIKE_SUCCESS') {
+          isSuccess = false;
+        } else {
+          isSuccess = statusVal.toLowerCase().includes('success') || statusVal.toLowerCase().includes('pass') || finalResult.toLowerCase().includes('pass');
+        }
+
+        const strike1 = isSuccess ? '' : '<w:strike w:val="1"/>';
+        const strike2 = isSuccess ? '<w:strike w:val="1"/>' : '';
+        const color1 = '000000'; // Tetap hitam
+        const color2 = '000000'; // Tetap hitam
+
+        // XML block pembangun 1 buah tabel kartu uji terstruktur (10 baris inti)
+        tableBlocksXml += `
+        <w:tbl>
+          <w:tblPr>
+            <w:tblW w:w="5000" w:type="pct"/>
+            <w:tblBorders>
+              <w:top w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+              <w:left w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+              <w:bottom w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+              <w:right w:val="single" w:sz="6" w:space="0" w:color="CCCCCC"/>
+              <w:insideH w:val="single" w:sz="4" w:space="0" w:color="DDDDDD"/>
+              <w:insideV w:val="single" w:sz="4" w:space="0" w:color="DDDDDD"/>
+            </w:tblBorders>
+            <w:tblLayout w:type="fixed"/>
+          </w:tblPr>
+          <w:tblGrid>
+            <w:gridCol w:w="2500"/>
+            <w:gridCol w:w="6500"/>
+          </w:tblGrid>
+          
+          <w:tr>
+            <w:trPr><w:cantSplit/></w:trPr>
+            <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>No Test Case</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(noTestCase)}</w:t></w:r></w:p></w:tc>
+          </w:tr>
+          
+          <w:tr>
+            <w:trPr><w:cantSplit/></w:trPr>
+            <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Function</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(functionName)}</w:t></w:r></w:p></w:tc>
+          </w:tr>
+          
+          <w:tr>
+            <w:trPr><w:cantSplit/></w:trPr>
+            <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Scenario</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(scenarioBody)}</w:t></w:r></w:p></w:tc>
+          </w:tr>
+          
+          <w:tr>
+            <w:trPr><w:cantSplit/></w:trPr>
+            <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Actual Result</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(actualResult)}</w:t></w:r></w:p></w:tc>
+          </w:tr>
+          
+          <w:tr>
+            <w:trPr><w:cantSplit/></w:trPr>
+            <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Status</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p>
+              <w:r><w:rPr>${strike1}<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:color w:val="${color1}"/><w:sz w:val="24"/></w:rPr><w:t>SUCCESS</w:t></w:r>
+              <w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr><w:t> / </w:t></w:r>
+              <w:r><w:rPr>${strike2}<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:color w:val="${color2}"/><w:sz w:val="24"/></w:rPr><w:t>FAILED</w:t></w:r>
+            </w:p></w:tc>
+          </w:tr>
+          
+          <w:tr>
+            <w:trPr><w:cantSplit/></w:trPr>
+            <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Expected Result</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(expectedResult)}</w:t></w:r></w:p></w:tc>
+          </w:tr>
+          
+          <w:tr>
+            <w:trPr><w:cantSplit/></w:trPr>
+            <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Screen Capture</w:t></w:r></w:p></w:tc>
+            <w:tc>
+              <w:tcPr><w:vAlign w:val="center"/></w:tcPr>
+              <w:p>
+                <w:pPr><w:spacing w:before="600" w:after="600"/><w:jc w:val="center"/></w:pPr>
+                <w:r><w:rPr><w:i/><w:color w:val="999999"/><w:sz w:val="18"/></w:rPr><w:t>[ Tempatkan Screenshot Bukti Uji Di Sini ]</w:t></w:r>
+              </w:p>
+            </w:tc>
+          </w:tr>
+          
+          <w:tr>
+            <w:trPr><w:cantSplit/></w:trPr>
+            <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Result</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p>
+              <w:r><w:rPr>${strike1}<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:color w:val="${color1}"/><w:sz w:val="24"/></w:rPr><w:t>PASSED</w:t></w:r>
+              <w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr><w:t> / </w:t></w:r>
+              <w:r><w:rPr>${strike2}<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:color w:val="${color2}"/><w:sz w:val="24"/></w:rPr><w:t>FAILED</w:t></w:r>
+            </w:p></w:tc>
+          </w:tr>
+          
+          <w:tr>
+            <w:trPr><w:cantSplit/></w:trPr>
+            <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Tested By</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(testerName)}</w:t></w:r></w:p></w:tc>
+          </w:tr>
+          
+          <w:tr>
+            <w:trPr><w:cantSplit/></w:trPr>
+            <w:tc><w:tcPr><w:shd w:fill="F5F5F5"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>Approved By</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(approverName)}</w:t></w:r></w:p></w:tc>
+          </w:tr>
+        </w:tbl>
+        <w:p><w:pPr><w:spacing w:after="240"/></w:pPr></w:p>
+        `;
+        
+        // Page Break for all except the last item
+        if (index < testCasesData.length - 1) {
+          tableBlocksXml += '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+        }
+      });
+
+      // D. Satukan seluruh blok tabel ke template induk document.xml
+      const documentXmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:body>
+        <w:p>
+          <w:pPr>
+            <w:jc w:val="center"/>
+            <w:spacing w:after="360"/>
+          </w:pPr>
+          <w:r>
+            <w:rPr>
+              <w:sz w:val="32"/>
+              <w:b/>
+              <w:color w:val="114477"/>
+            </w:rPr>
+            <w:t>SYSTEM INTEGRATION TESTING (SIT) REPORT</w:t>
+          </w:r>
+        </w:p>
+        ${tableBlocksXml}
+        <w:sectPr>
+          <w:pgSz w:w="11906" w:h="16838"/>
+          <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>
+        </w:sectPr>
+      </w:body>
+    </w:document>`;
+
+      zip.file("word/document.xml", documentXmlContent);
+
+      // E. Compile struktur berkas menjadi objek Blob siap unduh
+      const wordBlob = await zip.generateAsync({ type: "blob" });
+      return wordBlob;
     }
 
-    function createWordTableRowWithStrikethrough(label, option1, option2, choose1) {
-      const strike1 = choose1 ? '' : '<w:strike/>';
-      const strike2 = choose1 ? '<w:strike/>' : '';
-      const color1 = choose1 ? '000000' : '999999';
-      const color2 = choose1 ? '999999' : '000000';
 
-      return `
-      <w:tr>
-        <w:trPr><w:cantSplit/></w:trPr>
-        <w:tc>
-          <w:tcPr>
-            <w:shd w:fill="F2F2F2"/>
-            <w:vAlign w:val="center"/>
-          </w:tcPr>
-          <w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t>${label}</w:t></w:r></w:p>
-        </w:tc>
-        <w:tc>
-          <w:tcPr><w:vAlign w:val="center"/></w:tcPr>
-          <w:p>
-            <w:r>
-              <w:rPr>${strike1}<w:color w:val="${color1}"/><w:sz w:val="20"/></w:rPr>
-              <w:t>${option1}</w:t>
-            </w:r>
-            <w:r>
-              <w:rPr><w:color w:val="999999"/><w:sz w:val="20"/></w:rPr>
-              <w:t> / </w:t>
-            </w:r>
-            <w:r>
-              <w:rPr>${strike2}<w:color w:val="${color2}"/><w:sz w:val="20"/></w:rPr>
-              <w:t>${option2}</w:t>
-            </w:r>
-          </w:p>
-        </w:tc>
-      </w:tr>`;
-    }
-
-    // Escape special characters helper for Word XML injection
-    function escapeXml(unsafe) {
-      if (typeof unsafe !== 'string') unsafe = String(unsafe || '');
-      return unsafe.replace(/[<>&'"]/g, function (c) {
+    /**
+     * 3. HELPER FUNCTION: Sanitisasi String XML Konten
+     * Berfungsi mencegah file rusak/corrupt apabila terdapat karakter khusus (&, <, >) di teks Excel.
+     */
+    function escapeXml(unsafeString) {
+      if (typeof unsafeString !== 'string') unsafeString = String(unsafeString);
+      return unsafeString.replace(/[<>&'"]/g, function (c) {
         switch (c) {
           case '<': return '&lt;';
           case '>': return '&gt;';
           case '&': return '&amp;';
           case '\'': return '&apos;';
           case '"': return '&quot;';
+          default: return c;
         }
       });
+    }
+
+
+    /**
+     * 4. HELPER FUNCTION: Menampilkan Log Sistem ke Panel Konsol UI
+     */
+    function logToConsole(type, message) {
+      const consoleBody = document.getElementById('consoleBody');
+      if (!consoleBody) return;
+
+      const now = new Date();
+      const timestamp = `[${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
+      
+      let colorClass = "text-muted";
+      if (type === "SUCCESS") colorClass = "text-green";
+      if (type === "ERROR") colorClass = "text-red";
+      if (type === "WARNING") colorClass = "text-orange";
+
+      const logLine = document.createElement('div');
+      logLine.className = 'console-log-line';
+      logLine.innerHTML = `<span class="timestamp">${timestamp}</span> <span class="${colorClass}"><strong>${type}:</strong> ${message}</span>`;
+      
+      consoleBody.appendChild(logLine);
+      consoleBody.scrollTop = consoleBody.scrollHeight; // Auto-scroll ke bawah
     }
 
     // Settings Modal Logic
@@ -1027,6 +1190,17 @@
 
     function closeSettingsModal() {
       document.getElementById('settingsModal').classList.remove('visible');
+    }
+
+    // Fungsi utilitas UI untuk menyembunyikan/menampilkan input rentang angka
+    function toggleRangeInputs() {
+      const type = document.getElementById('cardRangeType').value;
+      const container = document.getElementById('cardRangeInputs');
+      if (type === 'CUSTOM') {
+        container.style.display = 'flex';
+      } else {
+        container.style.display = 'none';
+      }
     }
 
     // Initialize Lucide Icons on load
