@@ -835,7 +835,7 @@
           }
         }
 
-        if (imgRegistry.length > 0) {
+        if (imgRegistry.length > 0) { // === IMAGE INJECT BLOCK ===
           // Tambahkan file gambar ke ZIP
           for (const img of imgRegistry) {
             zip.file(`word/media/${img.filename}`, img.buf);
@@ -869,88 +869,66 @@
           }
           zip.file('word/_rels/document.xml.rels', relsXmlStr);
 
-          // Helper: buat XML DrawingML inline untuk DOCX yang sudah ada
-          const makeInlineDrawing = (rId) => {
-            const cx = 4500000; // ~5cm
-            const cy = 3375000; // ~3.75cm
-            const uid = Math.floor(Math.random() * 90000) + 10000;
-            return `<w:drawing xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-              <wp:inline><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>
-              <wp:docPr id="${uid}" name="img${uid}"/>
-              <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
-                <pic:pic><pic:nvPicPr><pic:cNvPr id="${uid}" name="img${uid}"/><pic:cNvPicPr/></pic:nvPicPr>
-                <pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
-                <pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>
-                <a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>
-              </a:graphicData></a:graphic></wp:inline>
-            </w:drawing>`;
-          };
 
-          // Pass 2: injeksi gambar ke sel target di setiap tabel
+          // === PASS 2: Tandai sel target dengan placeholder teks unik di DOM ===
+          const placeholderMap = new Map(); // placeholder string → rId gambar
           for (const plan of tableImagePlan) {
             const key = plan.paramVal.toLowerCase().trim();
             const imgData = imgRegistry.find(r => r.baseName === key);
             if (!imgData) continue;
 
             for (const targetCell of plan.targetCells) {
-              // Bersihkan isi sel lama
+              // Buat placeholder unik yang aman (hanya huruf/angka, tidak ada karakter XML khusus)
+              const placeholder = `SAUSTUDIO${imgData.rId.replace(/[^a-zA-Z0-9]/g,'')}PH${Math.floor(Math.random()*999999)}END`;
+              placeholderMap.set(placeholder, imgData.rId);
+
+              // Bersihkan semua run lama dari sel (pertahankan pPr agar format paragraf tetap)
               const paras = targetCell.getElementsByTagNameNS(WNS, 'p');
-              for (let p of Array.from(paras)) {
-                const runs = Array.from(p.getElementsByTagNameNS(WNS, 'r'));
-                runs.forEach(r => r.parentNode.removeChild(r));
+              let para = paras[0];
+              if (!para) {
+                para = xmlDoc.createElementNS(WNS, 'w:p');
+                targetCell.appendChild(para);
               }
+              Array.from(para.getElementsByTagNameNS(WNS, 'r')).forEach(r => r.parentNode.removeChild(r));
 
-              // Buat paragraf baru dengan DrawingML
-              const para = paras[0] || (() => {
-                const np = xmlDoc.createElementNS(WNS, 'w:p');
-                targetCell.appendChild(np);
-                return np;
-              })();
-
-              // Set paragraph alignment center
-              let pPr = para.getElementsByTagNameNS(WNS, 'pPr')[0];
-              if (!pPr) {
-                pPr = xmlDoc.createElementNS(WNS, 'w:pPr');
-                para.insertBefore(pPr, para.firstChild);
-              }
-              const jc = xmlDoc.createElementNS(WNS, 'w:jc');
-              jc.setAttribute('w:val', 'center');
-              pPr.appendChild(jc);
-
-              // Inject DrawingML as raw XML via temporary wrapper (serialize trick)
+              // Sisipkan run dengan placeholder teks (akan di-replace setelah serialize)
               const run = xmlDoc.createElementNS(WNS, 'w:r');
+              const t = xmlDoc.createElementNS(WNS, 'w:t');
+              t.textContent = placeholder;
+              run.appendChild(t);
               para.appendChild(run);
-
-              // Serialize, inject raw drawing XML string, then re-parse
-              const serializer2 = new XMLSerializer();
-              let tempXml = serializer2.serializeToString(xmlDoc);
-              const drawingXml = makeInlineDrawing(imgData.rId);
-              // Replace placeholder run with drawing XML
-              const runId = `__IMGRUN_${imgData.rId}_${plan.paramVal}__`;
-              run.setAttribute('w:id', runId);
-              let serialized = serializer2.serializeToString(xmlDoc);
-              serialized = serialized.replace(
-                new RegExp(`<w:r[^>]*w:id="${runId.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}"[^/]*/>`,'g'),
-                `<w:r>${drawingXml}</w:r>`
-              );
-              // Re-parse only if needed, else update inline
-              // (We'll do it via string replacement on the final serialize step)
-              run.setAttribute('data-imgdrawing', imgData.rId);
               filledCount++;
             }
           }
 
-          // Serialize ulang lalu patch drawing XML lewat string replacement
-          const serializer3 = new XMLSerializer();
-          let finalXml = serializer3.serializeToString(xmlDoc);
+          // === PASS 3: Serialize SATU KALI, lalu string-replace placeholder → DrawingML ===
+          // Ini memastikan format asli DOCX tidak berubah sama sekali (tidak ada re-serialisasi berganda)
+          const singleSerializer = new XMLSerializer();
+          let finalXml = singleSerializer.serializeToString(xmlDoc);
 
-          // Ganti tiap <w:r data-imgdrawing="rIdXxx"/> dengan <w:r><w:drawing>...</w:drawing></w:r>
-          finalXml = finalXml.replace(/<w:r [^>]*data-imgdrawing="([^"]+)"[^/]*\/>/g, (match, rId) => {
-            return `<w:r>${makeInlineDrawing(rId)}</w:r>`;
-          });
+          // Pastikan ada XML declaration
+          if (!finalXml.startsWith('<?xml')) {
+            finalXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + finalXml;
+          }
+
+          // Helper DrawingML — compact format, namespace deklarasi inline agar valid standalone
+          const makeInlineDrawing = (rId) => {
+            const cx = 4500000, cy = 3375000;
+            const uid = Math.floor(Math.random() * 90000) + 10000;
+            return `<w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${uid}" name="img${uid}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${uid}" name="img${uid}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`;
+          };
+
+          // Ganti setiap placeholder dengan blok DrawingML
+          for (const [placeholder, rId] of placeholderMap) {
+            // Cari pola <w:t...>PLACEHOLDER</w:t> dan ganti seluruh <w:r>...<w:t>PH</w:t></w:r> dengan DrawingML run
+            const escapedPH = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            finalXml = finalXml.replace(
+              new RegExp(`<w:r(?:[^>]*)?>(?:<w:rPr[\\s\\S]*?</w:rPr>)?<w:t(?:[^>]*)?>\\s*${escapedPH}\\s*</w:t></w:r>`),
+              `<w:r>${makeInlineDrawing(rId)}</w:r>`
+            );
+          }
 
           zip.file('word/document.xml', finalXml);
-
           const blob = await zip.generateAsync({
             type: 'blob',
             mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
